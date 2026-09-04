@@ -31,6 +31,7 @@ class fixed_writer final : public ring_view {
 
   // Reserves the next slot. Returns nullptr when the ring is full; the
   // spin_until_reserve overload blocks with exponential backoff instead.
+  // The reservation is invisible to the consumer until commit() publishes it.
   void* try_reserve() noexcept {
     control_block& hdr = *header_;
     const std::uint64_t item_size = hdr.fixed_item_size;
@@ -44,7 +45,8 @@ class fixed_writer final : public ring_view {
       return nullptr;  // Ring is full.
     }
 
-    hdr.rb_meta.write_pos.store(write + item_size, std::memory_order_relaxed);
+    reserved_end_ = write + item_size;
+    hdr.rb_meta.write_pos.store(reserved_end_, std::memory_order_relaxed);
     return data_ + write_index;
   }
 
@@ -58,10 +60,13 @@ class fixed_writer final : public ring_view {
     }
   }
 
-  // Publishes a reserved slot: seq-cst release so consumers observing
-  // commit_seq also observe the payload writes.
+  // Publishes the slot filled after the last try_reserve: advances commit_pos
+  // (release) so consumers chasing commit_pos observe the payload writes.
+  // Also bumps the 32-bit notify counter and wakes blocked consumers.
+  // Must be called once per successful reserve, in reserve order.
   void commit() noexcept {
     control_block& hdr = *header_;
+    hdr.rb_meta.commit_pos.store(reserved_end_, std::memory_order_release);
     hdr.rb_meta.commit_seq.fetch_add(1, std::memory_order_seq_cst);
     atomic_notify_all(&hdr.rb_meta.commit_seq);
   }
@@ -84,6 +89,11 @@ class fixed_writer final : public ring_view {
   std::size_t item_count() const noexcept {
     return static_cast<std::size_t>(header_->data_capacity / header_->fixed_item_size);
   }
+
+ private:
+  // End position of the slot filled after the last try_reserve; published by
+  // commit().
+  std::uint64_t reserved_end_{0};
 };
 
 }  // namespace spscring

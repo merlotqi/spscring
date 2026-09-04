@@ -14,9 +14,11 @@ namespace spscring {
 
 // Consumer side of a variable-length SPSC ring. Pairs with varlen_writer.
 //
-// The consumer chases the producer's commit_seq: a slot is readable once the
-// writer bumped the counter after filling it. Wrap padding slots (zero payload
-// size, slot_size == bytes to ring end) are skipped transparently.
+// The consumer chases the producer's published front (commit_pos), never the
+// reservation front: slots between commit_pos and write_pos are reserved but
+// possibly still being written. Wrap padding slots (payload_size == 0) are
+// skipped transparently; note that this makes zero-length payloads
+// indistinguishable from padding, so they are never delivered to the handler.
 class varlen_reader final : public ring_view {
  public:
   explicit varlen_reader(control_block* header) : ring_view(header) {}
@@ -31,20 +33,27 @@ class varlen_reader final : public ring_view {
     control_block& hdr = *header_;
     for (;;) {
       const std::uint64_t read_pos = hdr.rb_meta.read_pos.load(std::memory_order_relaxed);
-      const std::uint32_t commit_count = hdr.rb_meta.commit_seq.load(std::memory_order_acquire);
+      // Chase the producer's published front, never the reservation front:
+      // slots between commit_pos and write_pos are reserved but possibly
+      // still being written.
+      const std::uint64_t committed = hdr.rb_meta.commit_pos.load(std::memory_order_acquire);
+      const std::uint64_t used = committed > read_pos ? committed - read_pos : 0;
       const std::uint64_t read_index = read_pos % hdr.data_capacity;
 
       auto* slot = reinterpret_cast<const varlen_slot_header*>(data_ + read_index);
-      const std::uint64_t write_pos = hdr.rb_meta.write_pos.load(std::memory_order_acquire);
-      const std::uint64_t used = write_pos > read_pos ? write_pos - read_pos : 0;
       if (used == 0 || slot->slot_size == 0) {
-        return false;  // Nothing reserved yet at this position.
+        return false;  // Nothing published yet at this position.
       }
       if (used < slot->slot_size) {
-        return false;  // Producer still filling the slot.
+        return false;  // Should not happen (commit covers whole slots); be safe.
       }
-      if (commit_count == 0) {
-        return false;  // No committed messages at all.
+
+      if (slot->payload_size == 0) {
+        // Wrap padding committed by the producer to reach the ring start:
+        // skip it without consulting the handler.
+        hdr.rb_meta.read_pos.store(read_pos + slot->slot_size, std::memory_order_seq_cst);
+        atomic_notify_all(&hdr.rb_meta.read_wake_seq);
+        continue;
       }
 
       const std::uint32_t payload_size = slot->payload_size;
@@ -97,6 +106,9 @@ class varlen_reader final : public ring_view {
 
   std::size_t next_payload_size() const noexcept {
     const std::uint64_t read_pos = header_->rb_meta.read_pos.load(std::memory_order_relaxed);
+    if (header_->rb_meta.commit_pos.load(std::memory_order_acquire) <= read_pos) {
+      return 0;  // Ring empty.
+    }
     const std::uint64_t read_index = read_pos % header_->data_capacity;
     auto* slot = reinterpret_cast<const varlen_slot_header*>(data_ + read_index);
     return slot->payload_size;

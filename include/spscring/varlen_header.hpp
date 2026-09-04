@@ -33,18 +33,16 @@ inline std::uint32_t align_up_u32(std::uint32_t value, std::uint32_t alignment) 
 }
 
 // Validates a control block for varlen use; also normalizes a zero alignment
-// (legacy segments) to the default of 8. Returns false on structural problems.
+// (legacy segments) to the default of 8 BEFORE the structural check, so that
+// legacy segments pass validation. Returns false on structural problems.
 inline bool validate_varlen_control_block(control_block& header) noexcept {
-  if (!validate_control_block(header)) {
-    return false;
-  }
-  if (header.layout_type != static_cast<std::uint32_t>(layout_type::varlen)) {
-    return false;
-  }
   if (header.data_alignment == 0) {
     header.data_alignment = 8;  // Legacy default.
   }
-  return true;
+  if (!validate_control_block(header)) {
+    return false;
+  }
+  return header.layout_type == static_cast<std::uint32_t>(layout_type::varlen);
 }
 
 }  // namespace spscring

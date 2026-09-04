@@ -1,9 +1,11 @@
 #include <gtest/gtest.h>
 
 #include <atomic>
+#include <cstdio>
 #include <cstring>
 #include <string>
 #include <thread>
+#include <utility>
 #include <vector>
 
 #include <spscring/message_meta.hpp>
@@ -85,23 +87,24 @@ TEST(VarlenRingTest, MixedSizesAndFifoOrder) {
 }
 
 TEST(VarlenRingTest, SmallSegmentWrapUsesDummyHeader) {
-  // 64 bytes capacity with 8-byte alignment: header (24) + 40-byte payload fits
-  // exactly once; the next reserve must wrap via the dummy path.
+  // 64 bytes capacity with 8-byte alignment: the 32-byte header plus a 32-byte
+  // payload fills the ring exactly once; the next reserve must wrap via the
+  // dummy path.
   spscring_test::arena<64> small{};
   ASSERT_TRUE(small.init(spscring::layout_type::varlen, 8));
 
   spscring::varlen_writer writer{small.header()};
   spscring::varlen_reader reader{small.header()};
 
-  const std::uint32_t payload = 40;  // 24 + 40 == 64 == capacity
-  char sent[40]{};
+  const std::uint32_t payload = 32;  // 32 (header) + 32 == 64 == capacity
+  char sent[32]{};
   std::memcpy(sent, "wrap", 4);
   ASSERT_TRUE(writer.write(payload, sent));
 
   // Ring is now exactly full; nothing fits, not even the smallest message.
   EXPECT_EQ(writer.try_reserve(1).status, spscring::reserve_status::full);
 
-  char recv[40]{};
+  char recv[32]{};
   std::uint32_t recv_size = 0;
   ASSERT_TRUE(reader.read(recv, payload, &recv_size));
   EXPECT_EQ(recv_size, payload);
@@ -175,6 +178,21 @@ TEST(VarlenRingTest, SPSCThreadedStress) {
 
   producer.join();
   consumer.join();
+
+  if (received.size() != kMessages) {
+    std::vector<std::pair<std::uint64_t, std::uint64_t>> mismatches;
+    for (std::uint64_t i = 0; i < received.size() && mismatches.size() < 10; ++i) {
+      if (received[i] != i) {
+        mismatches.emplace_back(i, received[i]);
+      }
+    }
+    for (const auto& [index, value] : mismatches) {
+      std::printf("MISMATCH at %llu got %llu\n", static_cast<unsigned long long>(index),
+                  static_cast<unsigned long long>(value));
+    }
+    std::printf("total=%zu expected=%llu\n", received.size(), static_cast<unsigned long long>(kMessages));
+    std::fflush(stdout);
+  }
 
   ASSERT_EQ(received.size(), kMessages);
   for (std::uint64_t i = 0; i < kMessages; ++i) {

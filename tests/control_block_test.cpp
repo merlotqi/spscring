@@ -15,16 +15,16 @@ TEST(ControlBlockTest, PinnedAbiLayout) {
   // SPSCRING_CACHE_LINE_SIZE is a preprocessor macro (64), not a namespace
   // entity — used directly below.
 
-  static_assert(sizeof(spscring::meta) == 4 * SPSCRING_CACHE_LINE_SIZE);
+  static_assert(sizeof(spscring::meta) == 3 * SPSCRING_CACHE_LINE_SIZE);
   static_assert(offsetof(control_block, rb_meta) == SPSCRING_CACHE_LINE_SIZE);
-  static_assert(offsetof(control_block, data_capacity) == 5 * SPSCRING_CACHE_LINE_SIZE);
-  static_assert(sizeof(control_block) == 6 * SPSCRING_CACHE_LINE_SIZE);
+  static_assert(offsetof(control_block, data_capacity) == 4 * SPSCRING_CACHE_LINE_SIZE);
+  static_assert(sizeof(control_block) == 5 * SPSCRING_CACHE_LINE_SIZE);
   static_assert(std::is_standard_layout_v<control_block>);
 
-  EXPECT_EQ(sizeof(spscring::meta), 4u * SPSCRING_CACHE_LINE_SIZE);
+  EXPECT_EQ(sizeof(spscring::meta), 3u * SPSCRING_CACHE_LINE_SIZE);
   EXPECT_EQ(offsetof(control_block, rb_meta), static_cast<std::size_t>(SPSCRING_CACHE_LINE_SIZE));
-  EXPECT_EQ(offsetof(control_block, data_capacity), 5u * SPSCRING_CACHE_LINE_SIZE);
-  EXPECT_EQ(sizeof(control_block), 6u * SPSCRING_CACHE_LINE_SIZE);
+  EXPECT_EQ(offsetof(control_block, data_capacity), 4u * SPSCRING_CACHE_LINE_SIZE);
+  EXPECT_EQ(sizeof(control_block), 5u * SPSCRING_CACHE_LINE_SIZE);
   EXPECT_EQ(spscring::expected_magic, 0x53505343u);  // "SPSC"
 }
 
@@ -75,7 +75,8 @@ TEST(ControlBlockTest, ValidateRejectsCorruption) {
 }
 
 TEST(ControlBlockTest, VarlenHeaderLayout) {
-  EXPECT_EQ(spscring::varlen_slot_header_size, 24u);
+  // 4-byte slot_size + 4-byte payload_size + 24-byte message_meta.
+  EXPECT_EQ(spscring::varlen_slot_header_size, 32u);
   EXPECT_EQ(offsetof(spscring::varlen_slot_header, meta), 8u);
   EXPECT_EQ(sizeof(spscring::message_meta), 24u);
 }

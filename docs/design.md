@@ -11,8 +11,8 @@ a shared-memory mapping — the ring never owns storage and never allocates.
 
 ```
 offset  content                              size
-0       control_block                        384 B (6 cache lines)
-384     data region                          data_capacity bytes
+0       control_block                        320 B (5 cache lines)
+320     data region                          data_capacity bytes
 ```
 
 ### Control block (cross-process ABI)
@@ -25,30 +25,36 @@ offset  content                              size
 | header_size      | 8      | `sizeof(control_block)`               |
 | layout_type      | 12     | `fixed` (0) / `varlen` (1)            |
 | reserved0        | 16     | 0                                     |
-| rb_meta          | 64     | 4 cache lines (see below)             |
-| data_capacity    | 320    | bytes                                 |
-| data_alignment   | 328    | power of two, 1..64                   |
-| fixed_item_size  | 332    | fixed rings: slot size; else 0        |
-| reserved         | 336    | 48 bytes                              |
+| rb_meta          | 64     | 3 cache lines (see below)             |
+| data_capacity    | 256    | bytes                                 |
+| data_alignment   | 264    | power of two, 1..64                   |
+| fixed_item_size  | 268    | fixed rings: slot size; else 0        |
+| reserved         | 272    | 40 bytes                              |
 
-`offsetof` pins: `rb_meta == 64`, `data_capacity == 320`, `sizeof == 384`,
+`offsetof` pins: `rb_meta == 64`, `data_capacity == 256`, `sizeof == 320`,
 `std::is_standard_layout && std::is_trivially_copyable`. Any change is a
 breaking ABI change and must bump the version.
 
-### meta (wait words + ring indices)
+### meta (ring fronts + wait words)
 
-| field          | line | type             | written by |
-|----------------|------|------------------|------------|
-| write_pos      | 0    | atomic\<uint64\> | producer   |
-| read_pos       | 1    | atomic\<uint64\> | consumer   |
-| commit_seq     | 2    | atomic\<uint32\> | producer   |
-| read_wake_seq  | 3    | atomic\<uint32\> | consumer   |
+| field         | line | type             | written by | role                          |
+|---------------|------|------------------|------------|-------------------------------|
+| write_pos     | 0    | atomic\<uint64\> | producer   | reservation front             |
+| read_pos      | 1    | atomic\<uint64\> | consumer   | consumption front             |
+| read_wake_seq | 1    | atomic\<uint32\> | consumer   | producer wakeup (futex word)  |
+| commit_pos    | 2    | atomic\<uint64\> | producer   | publication front             |
+| commit_seq    | 2    | atomic\<uint32\> | producer   | consumer wakeup (futex word)  |
 
-- `write_pos` / `read_pos` are **monotonic logical byte offsets**. They are
-  never wrapped; the physical index is `pos % data_capacity`. 64-bit offsets
-  make the ABA problem practically impossible.
-- `commit_seq` / `read_wake_seq` are 32-bit on purpose: they double as futex
-  words on Linux and `WaitOnAddress` words on Windows.
+- The three **fronts** are monotonic logical byte offsets, never wrapped; the
+  physical index is `pos % data_capacity`. 64-bit offsets make the ABA problem
+  practically impossible.
+  - `write_pos` — space is *reserved* here before the slot is filled.
+  - `commit_pos` — advanced (release) after a slot is fully written; consumers
+    only chase this, so a reserved-but-unfinished slot is never observable.
+  - `read_pos` — advanced after a message is consumed.
+- The 32-bit sequence words exist purely to block/wake: they double as futex
+  words on Linux and `WaitOnAddress` words on Windows. Cache-line ownership
+  follows the writer: line 0 producer, line 1 consumer, line 2 producer.
 
 ## 2. Fixed ring
 
@@ -63,13 +69,14 @@ Producer fast path (`fixed_writer::try_reserve`):
 3. store `write_pos + item_size` relaxed (single writer: no CAS needed)
 4. return pointer to the slot
 
-Publication (`commit`): `commit_seq.fetch_add(1, seq_cst)` + notify-all on
-`commit_seq`.
+Publication (`commit`): `commit_pos.store(reserved_end, release)` — this is
+what makes the slot observable — followed by `commit_seq.fetch_add` (seq_cst)
+and a notify-all on `commit_seq` for blocked consumers.
 
-Consumer (`fixed_reader::try_read`): load `read_pos` relaxed / `write_pos`
-acquire; if equal the ring is empty; otherwise return the in-place slot view.
-`read_advance(n)` adds `n * item_size` to `read_pos` (seq_cst) and notifies
-producers via `read_wake_seq`.
+Consumer (`fixed_reader::try_read`): load `read_pos` relaxed / `commit_pos`
+acquire; if `commit_pos <= read_pos` the ring is empty; otherwise return the
+in-place slot view. `read_advance(n)` adds `n * item_size` to `read_pos`
+(seq_cst) and notifies producers via `read_wake_seq`.
 
 ## 3. Variable-length ring
 

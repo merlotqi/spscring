@@ -17,15 +17,19 @@ class fixed_reader final : public ring_view {
 
   // Returns a pointer to the oldest unconsumed slot, or nullptr when empty.
   // The view stays valid until read_advance() publishes the consumption.
+  //
+  // Readiness is gated on commit_pos (the producer's published front), never
+  // on write_pos (the reservation front): a reserved-but-unfinished slot is
+  // not observable here.
   const void* try_read(std::uint32_t* out_size = nullptr) noexcept {
     control_block& hdr = *header_;
     const std::uint64_t item_size = hdr.fixed_item_size;
     const std::uint64_t capacity = hdr.data_capacity;
     const std::uint64_t read = hdr.rb_meta.read_pos.load(std::memory_order_relaxed);
-    const std::uint64_t write = hdr.rb_meta.write_pos.load(std::memory_order_acquire);
+    const std::uint64_t committed = hdr.rb_meta.commit_pos.load(std::memory_order_acquire);
 
-    if (read == write) {
-      return nullptr;  // Ring is empty.
+    if (committed <= read) {
+      return nullptr;  // Nothing published yet.
     }
 
     if (out_size != nullptr) {

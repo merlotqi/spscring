@@ -14,31 +14,40 @@ enum class layout_type : std::uint32_t {
   varlen = 1,
 };
 
-// SPSC ring indices and wait words. write_pos/read_pos are monotonic logical
-// byte offsets (uint64: they never wrap in practice); the data region index is
+// SPSC ring indices and wait words. Positions are monotonic logical byte
+// offsets (uint64: they never wrap in practice); the data region index is
 // pos % data_capacity.
 //
-//   write_pos     - advanced by the producer's compare-and-swap in try_reserve.
-//   read_pos      - advanced by the consumer after a message is consumed.
-//   commit_seq    - bumped by the producer after each message becomes readable
-//                   (32-bit: Linux futex compare value). Wait word for consumers.
-//   read_wake_seq - bumped by the consumer whenever read_pos advances (including
-//                   wrap padding); wakes producers blocked on space.
+//   write_pos      - producer reservation front: space is allocated here by
+//                    CAS/store BEFORE the slot is filled.
+//   commit_pos     - producer published front: advanced (release) after a slot
+//                    is fully written. Consumers only chase this value, so a
+//                    reserved-but-unfinished slot is never observable, and a
+//                    recycled index (after wrap) is never confused with stale
+//                    content.
+//   read_pos       - consumer front: advanced after a message is consumed.
+//   commit_seq     - 32-bit notify counter bumped by the producer (futex word).
+//   read_wake_seq  - 32-bit notify counter bumped by the consumer (futex word).
 //
-// Each counter occupies its own cache line; wait words must stay 32-bit so the
-// futex path can block on them directly.
+// Cache-line ownership follows the writer: line 0 producer (reserve side),
+// line 1 consumer, line 2 producer (commit side). The 32-bit counters double
+// as futex / WaitOnAddress words on Linux / Windows.
 struct meta {
+  // Line 0: producer — reservation front.
   SPSCRING_ALIGNAS_CACHE_LINE std::atomic<std::uint64_t> write_pos{0};
   std::uint8_t padding1[SPSCRING_CACHE_LINE_SIZE - sizeof(std::atomic<std::uint64_t>)];
 
+  // Line 1: consumer — consumption front + producer wakeup word.
   SPSCRING_ALIGNAS_CACHE_LINE std::atomic<std::uint64_t> read_pos{0};
-  std::uint8_t padding2[SPSCRING_CACHE_LINE_SIZE - sizeof(std::atomic<std::uint64_t>)];
+  std::atomic<std::uint32_t> read_wake_seq{0};
+  std::uint8_t padding2[SPSCRING_CACHE_LINE_SIZE - sizeof(std::atomic<std::uint64_t>) -
+                        sizeof(std::atomic<std::uint32_t>)];
 
-  SPSCRING_ALIGNAS_CACHE_LINE std::atomic<std::uint32_t> commit_seq{0};
-  std::uint8_t padding3[SPSCRING_CACHE_LINE_SIZE - sizeof(std::atomic<std::uint32_t>)];
-
-  SPSCRING_ALIGNAS_CACHE_LINE std::atomic<std::uint32_t> read_wake_seq{0};
-  std::uint8_t padding4[SPSCRING_CACHE_LINE_SIZE - sizeof(std::atomic<std::uint32_t>)];
+  // Line 2: producer — publication front + consumer wakeup word.
+  SPSCRING_ALIGNAS_CACHE_LINE std::atomic<std::uint64_t> commit_pos{0};
+  std::atomic<std::uint32_t> commit_seq{0};
+  std::uint8_t padding3[SPSCRING_CACHE_LINE_SIZE - sizeof(std::atomic<std::uint64_t>) -
+                        sizeof(std::atomic<std::uint32_t>)];
 };
 
 // The control block is the cross-process ABI: it lives at the start of a shared
@@ -90,6 +99,7 @@ inline bool init_control_block(control_block& header, std::uint64_t data_capacit
   header.layout_type = static_cast<std::uint32_t>(layout);
   header.reserved0 = 0;
   header.rb_meta.write_pos.store(0, std::memory_order_relaxed);
+  header.rb_meta.commit_pos.store(0, std::memory_order_relaxed);
   header.rb_meta.read_pos.store(0, std::memory_order_relaxed);
   header.rb_meta.commit_seq.store(0, std::memory_order_relaxed);
   header.rb_meta.read_wake_seq.store(0, std::memory_order_relaxed);
@@ -102,13 +112,16 @@ inline bool init_control_block(control_block& header, std::uint64_t data_capacit
   return true;
 }
 
-// Structural sanity check for a control block found in mapped memory. Peer
-// processes that expect a specific capacity/layout/item size should compare
-// those fields themselves after this check passes.
+// Structural sanity check for a control block found in mapped memory. A zero
+// data_alignment is tolerated as "unset" (legacy segments); anything non-zero
+// must be a power of two in [1, 64]. Peer processes that expect a specific
+// capacity/layout/item size should compare those fields themselves after this
+// check passes.
 inline bool validate_control_block(const control_block& header) noexcept {
   return header.magic == expected_magic && header.version_major == version_major &&
-         header.header_size == sizeof(control_block) && is_valid_data_alignment(header.data_alignment) &&
-         header.data_capacity != 0 && header.data_capacity % header.data_alignment == 0;
+         header.header_size == sizeof(control_block) &&
+         (header.data_alignment == 0 || is_valid_data_alignment(header.data_alignment)) &&
+         header.data_capacity != 0;
 }
 
 // ABI pins: changing any of these is a breaking change for mapped segments and
@@ -117,12 +130,12 @@ static_assert(std::is_standard_layout_v<control_block>,
               "control_block must stay standard-layout (shared-memory ABI)");
 static_assert(std::is_trivially_copyable_v<control_block>,
               "control_block must stay trivially copyable (shared-memory ABI)");
-static_assert(sizeof(meta) == 4 * SPSCRING_CACHE_LINE_SIZE, "meta must be exactly four cache lines");
+static_assert(sizeof(meta) == 3 * SPSCRING_CACHE_LINE_SIZE, "meta must be exactly three cache lines");
 static_assert(offsetof(control_block, rb_meta) == SPSCRING_CACHE_LINE_SIZE,
               "rb_meta must start on the second cache line");
-static_assert(offsetof(control_block, data_capacity) == 5 * SPSCRING_CACHE_LINE_SIZE,
-              "data_capacity must start on the sixth cache line");
-static_assert(sizeof(control_block) == 6 * SPSCRING_CACHE_LINE_SIZE,
+static_assert(offsetof(control_block, data_capacity) == 4 * SPSCRING_CACHE_LINE_SIZE,
+              "data_capacity must start on the fifth cache line");
+static_assert(sizeof(control_block) == 5 * SPSCRING_CACHE_LINE_SIZE,
               "the data region must start on a 64-byte boundary");
 
 }  // namespace spscring

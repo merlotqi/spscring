@@ -55,6 +55,9 @@ class varlen_writer final : public ring_view {
                                                           std::memory_order_acquire)) {
           auto* dummy = reinterpret_cast<varlen_slot_header*>(data_ + head_index);
           *dummy = varlen_slot_header{static_cast<std::uint32_t>(wrap_padding), 0, message_meta{}};
+          // Publish the padding slot immediately (nothing else is in flight
+          // between reserve and commit within this call).
+          hdr.rb_meta.commit_pos.store(new_head, std::memory_order_release);
           hdr.rb_meta.commit_seq.fetch_add(1, std::memory_order_seq_cst);
           atomic_notify_all(&hdr.rb_meta.commit_seq);
           head = new_head;
@@ -88,11 +91,18 @@ class varlen_writer final : public ring_view {
     return result;
   }
 
-  // Makes the slot at `position` (from a successful try_reserve) visible.
+  // Makes the slot at `position` (from a successful try_reserve) visible by
+  // advancing commit_pos (release) to the end of that slot, then waking
+  // consumers via the 32-bit notify counter.
   void commit(std::uint64_t position) noexcept {
-    (void)position;
-    header_->rb_meta.commit_seq.fetch_add(1, std::memory_order_seq_cst);
-    atomic_notify_all(&header_->rb_meta.commit_seq);
+    control_block& hdr = *header_;
+    // The slot header at `position` was written by this same producer thread,
+    // so a relaxed load of its size is safe. commit_pos publishes both the
+    // header and the payload writes to the consumer (acquire side).
+    const auto* slot = reinterpret_cast<const varlen_slot_header*>(data_ + (position % hdr.data_capacity));
+    hdr.rb_meta.commit_pos.store(position + slot->slot_size, std::memory_order_release);
+    hdr.rb_meta.commit_seq.fetch_add(1, std::memory_order_seq_cst);
+    atomic_notify_all(&hdr.rb_meta.commit_seq);
   }
 
   // Single-shot convenience: reserve + copy + commit.

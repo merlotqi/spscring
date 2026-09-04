@@ -71,6 +71,7 @@ TEST(FixedRingTest, FullRingRejectsWritesThenRecovers) {
   char recv[kItemSize]{};
   EXPECT_TRUE(reader.read(recv, kItemSize));
   EXPECT_EQ(recv[0], '\0');
+  sent[0] = '\0';  // Re-write with the same tag the drain below expects.
   EXPECT_TRUE(writer.write(sent, kItemSize));
   EXPECT_FALSE(writer.write(sent, kItemSize));  // full again
 
