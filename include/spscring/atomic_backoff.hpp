@@ -4,7 +4,7 @@
 #include <thread>
 
 #include <spscring/atomic_wait.hpp>
-#include <spscring/platform.hpp>
+#include <spscring/internal/platform.hpp>
 
 namespace spscring {
 

@@ -8,7 +8,7 @@
 #include <spscring/control_block.hpp>
 #include <spscring/message_meta.hpp>
 #include <spscring/ring_view.hpp>
-#include <spscring/varlen_header.hpp>
+#include <spscring/internal/varlen_header.hpp>
 
 namespace spscring {
 

@@ -4,7 +4,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <type_traits>
-#include <spscring/platform.hpp>
+#include <spscring/internal/platform.hpp>
 
 namespace spscring {
 

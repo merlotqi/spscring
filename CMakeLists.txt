@@ -6,8 +6,6 @@ project(spscring
     LANGUAGES CXX
 )
 
-# ---------------------------------------------------------------- header-only library
-
 add_library(spscring INTERFACE)
 add_library(spscring::spscring ALIAS spscring)
 
@@ -18,12 +16,9 @@ target_include_directories(spscring INTERFACE
 )
 
 if(SPSCRING_SANITIZE)
-    # development helper: -DSPSCRING_SANITIZE=address,undefined
     target_compile_options(spscring INTERFACE -fsanitize=${SPSCRING_SANITIZE} -fno-omit-frame-pointer)
     target_link_options(spscring INTERFACE -fsanitize=${SPSCRING_SANITIZE})
 endif()
-
-# ---------------------------------------------------------------- options
 
 if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
     set(SPSCRING_IS_TOP_LEVEL ON)
@@ -34,8 +29,6 @@ endif()
 option(SPSCRING_BUILD_TESTS "Build spscring unit tests" ${SPSCRING_IS_TOP_LEVEL})
 option(SPSCRING_BUILD_BENCHMARKS "Build spscring benchmarks" OFF)
 option(SPSCRING_BUILD_EXAMPLES "Build spscring examples" ${SPSCRING_IS_TOP_LEVEL})
-
-# ---------------------------------------------------------------- subdirectories
 
 if(SPSCRING_BUILD_TESTS)
     enable_testing()
@@ -49,8 +42,6 @@ endif()
 if(SPSCRING_BUILD_EXAMPLES)
     add_subdirectory(examples)
 endif()
-
-# ---------------------------------------------------------------- install
 
 include(GNUInstallDirs)
 install(TARGETS spscring EXPORT spscringTargets)

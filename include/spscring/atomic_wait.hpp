@@ -11,14 +11,14 @@
 #include <cstdint>
 #include <thread>
 
-#include <spscring/platform.hpp>
+#include <spscring/internal/platform.hpp>
 
 #if defined(__linux__)
-#include <spscring/atomic_wait_futex.hpp>
+#include <spscring/internal/atomic_wait_futex.hpp>
 #elif defined(_WIN32)
-#include <spscring/atomic_wait_win32.hpp>
+#include <spscring/internal/atomic_wait_win32.hpp>
 #elif defined(__APPLE__)
-#include <spscring/atomic_wait_darwin.hpp>
+#include <spscring/internal/atomic_wait_darwin.hpp>
 #endif
 
 namespace spscring {
