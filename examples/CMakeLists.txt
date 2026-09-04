@@ -1,0 +1,2 @@
+add_executable(spscring_example_basic basic_usage.cpp)
+target_link_libraries(spscring_example_basic PRIVATE spscring)
