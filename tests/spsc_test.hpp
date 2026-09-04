@@ -4,9 +4,8 @@
 
 #include <cstddef>
 #include <cstdint>
-#include <utility>
-
 #include <spscring/control_block.hpp>
+#include <utility>
 
 namespace spscring_test {
 

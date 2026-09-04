@@ -1,0 +1,7 @@
+prefix=@CMAKE_INSTALL_PREFIX@
+includedir=${prefix}/@CMAKE_INSTALL_INCLUDEDIR@
+
+Name: spscring
+Description: Single-producer/single-consumer lock-free ring buffers (header-only, C++17)
+Version: @SPSCRING_VERSION@
+Cflags: -I${includedir}

@@ -2,10 +2,10 @@
 
 #include <atomic>
 #include <cstdint>
-#include <type_traits>
 #include <spscring/atomic_backoff.hpp>
 #include <spscring/control_block.hpp>
 #include <spscring/ring_view.hpp>
+#include <type_traits>
 
 namespace spscring {
 

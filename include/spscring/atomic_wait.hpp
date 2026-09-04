@@ -9,9 +9,8 @@
 #include <atomic>
 #include <chrono>
 #include <cstdint>
-#include <thread>
-
 #include <spscring/internal/platform.hpp>
+#include <thread>
 
 #if defined(__linux__)
 #include <spscring/internal/atomic_wait_futex.hpp>

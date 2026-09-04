@@ -1,7 +1,13 @@
 cmake_minimum_required(VERSION 3.14)
 
+# Reusable build helpers (warnings, sanitizers, version, packaging).
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
+include(spscring-version)
+include(spscring-warnings)
+include(spscring-sanitizers)
+
 project(spscring
-    VERSION 0.1.0
+    VERSION ${SPSCRING_VERSION}
     DESCRIPTION "Single-producer/single-consumer lock-free ring buffers for shared-memory IPC"
     LANGUAGES CXX
 )
@@ -16,8 +22,7 @@ target_include_directories(spscring INTERFACE
 )
 
 if(SPSCRING_SANITIZE)
-    target_compile_options(spscring INTERFACE -fsanitize=${SPSCRING_SANITIZE} -fno-omit-frame-pointer)
-    target_link_options(spscring INTERFACE -fsanitize=${SPSCRING_SANITIZE})
+    spscring_enable_sanitizers(spscring "${SPSCRING_SANITIZE}")
 endif()
 
 if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
@@ -43,10 +48,40 @@ if(SPSCRING_BUILD_EXAMPLES)
     add_subdirectory(examples)
 endif()
 
+# ---- Install / packaging ----
+
 include(GNUInstallDirs)
+
 install(TARGETS spscring EXPORT spscringTargets)
 install(DIRECTORY include/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 install(EXPORT spscringTargets
     NAMESPACE spscring::
     DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/spscring
 )
+
+# find_package(spscring CONFIG) support.
+include(CMakePackageConfigHelpers)
+configure_package_config_file(
+    ${CMAKE_CURRENT_SOURCE_DIR}/cmake/spscring-config.cmake.in
+    ${CMAKE_CURRENT_BINARY_DIR}/spscring-config.cmake
+    INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/spscring
+)
+write_basic_package_version_file(
+    ${CMAKE_CURRENT_BINARY_DIR}/spscring-config-version.cmake
+    VERSION ${SPSCRING_VERSION}
+    COMPATIBILITY SameMajorVersion
+)
+install(FILES
+    ${CMAKE_CURRENT_BINARY_DIR}/spscring-config.cmake
+    ${CMAKE_CURRENT_BINARY_DIR}/spscring-config-version.cmake
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/spscring
+)
+
+# pkg-config (.pc) support.
+configure_file(
+    ${CMAKE_CURRENT_SOURCE_DIR}/cmake/spscring.pc.in
+    ${CMAKE_CURRENT_BINARY_DIR}/spscring.pc
+    @ONLY
+)
+install(FILES ${CMAKE_CURRENT_BINARY_DIR}/spscring.pc
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}/pkgconfig)

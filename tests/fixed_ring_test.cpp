@@ -4,12 +4,11 @@
 #include <cstdio>
 #include <cstring>
 #include <numeric>
-#include <thread>
-#include <vector>
-
 #include <spscring/fixed_reader.hpp>
 #include <spscring/fixed_writer.hpp>
 #include <spscring/message_meta.hpp>
+#include <thread>
+#include <vector>
 
 #include "spsc_test.hpp"
 

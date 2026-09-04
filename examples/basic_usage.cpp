@@ -8,9 +8,8 @@
 #include <cstring>
 #include <iostream>
 #include <memory>
-#include <string>
-
 #include <spscring/spscring.hpp>
+#include <string>
 
 namespace {
 
@@ -76,8 +75,8 @@ void varlen_ring_demo() {
   std::uint32_t received_size = 0;
   spscring::message_meta received_meta{};
   if (reader.read(buffer, sizeof(buffer), &received_size, &received_meta)) {
-    std::cout << "varlen ring received: " << std::string(buffer, received_size) << " (user_data="
-              << received_meta.user_data << ")\n";
+    std::cout << "varlen ring received: " << std::string(buffer, received_size)
+              << " (user_data=" << received_meta.user_data << ")\n";
   }
 }
 

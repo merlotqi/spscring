@@ -1,10 +1,9 @@
 #pragma once
 
 #include <cstdint>
-#include <thread>
-
 #include <spscring/atomic_wait.hpp>
 #include <spscring/internal/platform.hpp>
+#include <thread>
 
 namespace spscring {
 

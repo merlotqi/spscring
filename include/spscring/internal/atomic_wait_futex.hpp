@@ -4,11 +4,12 @@
 // on the physical page, so MAP_SHARED mappings work).
 #if defined(__linux__)
 
-#include <atomic>
-#include <cstdint>
 #include <linux/futex.h>
 #include <sys/syscall.h>
 #include <unistd.h>
+
+#include <atomic>
+#include <cstdint>
 
 #ifndef FUTEX_WAIT_PRIVATE
 #define FUTEX_WAIT_PRIVATE 128

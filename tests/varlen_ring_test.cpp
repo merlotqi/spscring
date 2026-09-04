@@ -3,14 +3,13 @@
 #include <atomic>
 #include <cstdio>
 #include <cstring>
+#include <spscring/message_meta.hpp>
+#include <spscring/varlen_reader.hpp>
+#include <spscring/varlen_writer.hpp>
 #include <string>
 #include <thread>
 #include <utility>
 #include <vector>
-
-#include <spscring/message_meta.hpp>
-#include <spscring/varlen_reader.hpp>
-#include <spscring/varlen_writer.hpp>
 
 #include "spsc_test.hpp"
 

@@ -3,13 +3,13 @@
 #include <atomic>
 #include <cstdint>
 #include <cstring>
-#include <type_traits>
 #include <spscring/atomic_backoff.hpp>
 #include <spscring/control_block.hpp>
+#include <spscring/internal/varlen_header.hpp>
 #include <spscring/message_meta.hpp>
 #include <spscring/reserve_result.hpp>
 #include <spscring/ring_view.hpp>
-#include <spscring/internal/varlen_header.hpp>
+#include <type_traits>
 
 namespace spscring {
 

@@ -14,6 +14,7 @@ function(spscring_gtest_executable name)
     add_executable(${name} ${ARGN})
     target_link_libraries(${name} PRIVATE spscring GTest::gtest_main)
     set_target_properties(${name} PROPERTIES FOLDER "Tests")
+    spscring_enable_warnings(${name})
     gtest_discover_tests(${name})
 endfunction()
 

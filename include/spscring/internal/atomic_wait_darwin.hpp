@@ -120,16 +120,16 @@ inline void atomic_wait(const std::atomic<T>* atomic, T old) {
     }
   } else {
     while (atomic->load(std::memory_order_acquire) == old) {
-      (void)details::ulock_wait(const_cast<std::atomic<T>*>(atomic),
-                                static_cast<uint64_t>(static_cast<uint32_t>(old)), SPSCRING_ULOCK_TIMEOUT_NS);
+      (void)details::ulock_wait(const_cast<std::atomic<T>*>(atomic), static_cast<uint64_t>(static_cast<uint32_t>(old)),
+                                SPSCRING_ULOCK_TIMEOUT_NS);
     }
   }
 
 #else
   // No os_sync available, use ulock with timeout re-check.
   while (atomic->load(std::memory_order_acquire) == old) {
-    (void)details::ulock_wait(const_cast<std::atomic<T>*>(atomic),
-                              static_cast<uint64_t>(static_cast<uint32_t>(old)), SPSCRING_ULOCK_TIMEOUT_NS);
+    (void)details::ulock_wait(const_cast<std::atomic<T>*>(atomic), static_cast<uint64_t>(static_cast<uint32_t>(old)),
+                              SPSCRING_ULOCK_TIMEOUT_NS);
   }
 #endif
 }

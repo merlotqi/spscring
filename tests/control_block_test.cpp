@@ -2,11 +2,10 @@
 
 #include <cstddef>
 #include <cstdint>
-
 #include <spscring/control_block.hpp>
+#include <spscring/internal/varlen_header.hpp>
 #include <spscring/message_meta.hpp>
 #include <spscring/reserve_result.hpp>
-#include <spscring/internal/varlen_header.hpp>
 
 namespace {
 
@@ -102,8 +101,7 @@ TEST(ReserveResultTest, BoolConversion) {
   full.status = spscring::reserve_status::full;
   EXPECT_FALSE(static_cast<bool>(full));
 
-  EXPECT_STREQ(spscring::reserve_status_cstr(spscring::reserve_status::message_too_large),
-               "message_too_large");
+  EXPECT_STREQ(spscring::reserve_status_cstr(spscring::reserve_status::message_too_large), "message_too_large");
 }
 
 }  // namespace

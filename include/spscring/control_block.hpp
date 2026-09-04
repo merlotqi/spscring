@@ -3,8 +3,8 @@
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
-#include <type_traits>
 #include <spscring/internal/platform.hpp>
+#include <type_traits>
 
 namespace spscring {
 
@@ -40,14 +40,14 @@ struct meta {
   // Line 1: consumer — consumption front + producer wakeup word.
   SPSCRING_ALIGNAS_CACHE_LINE std::atomic<std::uint64_t> read_pos{0};
   std::atomic<std::uint32_t> read_wake_seq{0};
-  std::uint8_t padding2[SPSCRING_CACHE_LINE_SIZE - sizeof(std::atomic<std::uint64_t>) -
-                        sizeof(std::atomic<std::uint32_t>)];
+  std::uint8_t
+      padding2[SPSCRING_CACHE_LINE_SIZE - sizeof(std::atomic<std::uint64_t>) - sizeof(std::atomic<std::uint32_t>)];
 
   // Line 2: producer — publication front + consumer wakeup word.
   SPSCRING_ALIGNAS_CACHE_LINE std::atomic<std::uint64_t> commit_pos{0};
   std::atomic<std::uint32_t> commit_seq{0};
-  std::uint8_t padding3[SPSCRING_CACHE_LINE_SIZE - sizeof(std::atomic<std::uint64_t>) -
-                        sizeof(std::atomic<std::uint32_t>)];
+  std::uint8_t
+      padding3[SPSCRING_CACHE_LINE_SIZE - sizeof(std::atomic<std::uint64_t>) - sizeof(std::atomic<std::uint32_t>)];
 };
 
 // The control block is the cross-process ABI: it lives at the start of a shared
@@ -120,14 +120,12 @@ inline bool init_control_block(control_block& header, std::uint64_t data_capacit
 inline bool validate_control_block(const control_block& header) noexcept {
   return header.magic == expected_magic && header.version_major == version_major &&
          header.header_size == sizeof(control_block) &&
-         (header.data_alignment == 0 || is_valid_data_alignment(header.data_alignment)) &&
-         header.data_capacity != 0;
+         (header.data_alignment == 0 || is_valid_data_alignment(header.data_alignment)) && header.data_capacity != 0;
 }
 
 // ABI pins: changing any of these is a breaking change for mapped segments and
 // requires bumping version_major/minor.
-static_assert(std::is_standard_layout_v<control_block>,
-              "control_block must stay standard-layout (shared-memory ABI)");
+static_assert(std::is_standard_layout_v<control_block>, "control_block must stay standard-layout (shared-memory ABI)");
 static_assert(std::is_trivially_copyable_v<control_block>,
               "control_block must stay trivially copyable (shared-memory ABI)");
 static_assert(sizeof(meta) == 3 * SPSCRING_CACHE_LINE_SIZE, "meta must be exactly three cache lines");

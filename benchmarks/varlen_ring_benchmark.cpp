@@ -6,9 +6,8 @@
 #include <cstdint>
 #include <cstring>
 #include <memory>
-#include <thread>
-
 #include <spscring/spscring.hpp>
+#include <thread>
 
 namespace {
 
@@ -16,8 +15,7 @@ constexpr std::size_t kCapacity = 1u << 20;  // 1 MiB
 constexpr std::uint64_t kMessagesPerBatch = 500000;
 
 struct varlen_ring_fixture {
-  std::unique_ptr<std::byte[]> storage{
-      std::make_unique<std::byte[]>(sizeof(spscring::control_block) + kCapacity)};
+  std::unique_ptr<std::byte[]> storage{std::make_unique<std::byte[]>(sizeof(spscring::control_block) + kCapacity)};
 
   varlen_ring_fixture() {
     auto* header = reinterpret_cast<spscring::control_block*>(storage.get());

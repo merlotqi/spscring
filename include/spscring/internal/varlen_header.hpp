@@ -1,7 +1,7 @@
 #pragma once
 
-#include <cstdint>
 #include <cstddef>
+#include <cstdint>
 #include <cstring>
 #include <spscring/control_block.hpp>
 #include <spscring/message_meta.hpp>
@@ -24,8 +24,7 @@ struct varlen_slot_header {
 
 inline constexpr std::uint32_t varlen_slot_header_size = static_cast<std::uint32_t>(sizeof(varlen_slot_header));
 
-static_assert(offsetof(varlen_slot_header, meta) == 8,
-              "varlen_slot_header must be tightly packed (shared-memory ABI)");
+static_assert(offsetof(varlen_slot_header, meta) == 8, "varlen_slot_header must be tightly packed (shared-memory ABI)");
 
 // Rounds up to the next multiple of alignment (alignment must be a power of 2).
 inline std::uint32_t align_up_u32(std::uint32_t value, std::uint32_t alignment) noexcept {

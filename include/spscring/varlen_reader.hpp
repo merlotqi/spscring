@@ -3,12 +3,12 @@
 #include <atomic>
 #include <cstdint>
 #include <cstring>
-#include <type_traits>
 #include <spscring/atomic_backoff.hpp>
 #include <spscring/control_block.hpp>
+#include <spscring/internal/varlen_header.hpp>
 #include <spscring/message_meta.hpp>
 #include <spscring/ring_view.hpp>
-#include <spscring/internal/varlen_header.hpp>
+#include <type_traits>
 
 namespace spscring {
 
@@ -26,8 +26,7 @@ class varlen_reader final : public ring_view {
   // Handler receives (payload pointer, payload size, message meta, reserved).
   // When it returns true the message is consumed; returning false keeps it.
   template <typename Handler>
-  bool read(Handler&& handler) noexcept(noexcept(handler(std::declval<std::uint8_t*&>(),
-                                                         std::declval<std::uint32_t&>(),
+  bool read(Handler&& handler) noexcept(noexcept(handler(std::declval<std::uint8_t*&>(), std::declval<std::uint32_t&>(),
                                                          std::declval<message_meta&>(),
                                                          std::declval<std::uint64_t&>()))) {
     control_block& hdr = *header_;

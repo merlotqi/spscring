@@ -1,0 +1,11 @@
+@PACKAGE_INIT@
+
+include("${CMAKE_CURRENT_LIST_DIR}/spscringTargets.cmake")
+
+# The exported target is installed as spscring::spscring. Also surface a plain
+# `spscring` alias so consumers can link either name.
+if(TARGET spscring::spscring AND NOT TARGET spscring)
+  add_library(spscring ALIAS spscring::spscring)
+endif()
+
+check_required_components(spscring)
