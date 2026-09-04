@@ -1,6 +1,6 @@
 #pragma once
 
-// spscing — single-producer/single-consumer lock-free ring buffers.
+// spscring — single-producer/single-consumer lock-free ring buffers.
 //
 // Header-only, C++17, no third-party dependencies, no allocations.
 //   - fixed ring:   constant-size frames, one CAS per reserve

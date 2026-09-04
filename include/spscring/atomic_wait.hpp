@@ -7,6 +7,7 @@
 //   other  - C++11 std::atomic_wait-style polling (atomic_poll)
 
 #include <atomic>
+#include <chrono>
 #include <cstdint>
 #include <thread>
 
@@ -20,7 +21,7 @@
 #include <spscring/atomic_wait_darwin.hpp>
 #endif
 
-namespace spscing {
+namespace spscring {
 
 // Portable fallback for platforms without a futex-like primitive: pure polling
 // with an exponential CPU-pause backoff. Used by no-wait code paths everywhere,
@@ -45,7 +46,7 @@ inline void atomic_wait(const std::atomic<T>* atomic, T old) {
 #if defined(__linux__) || defined(_WIN32) || defined(__APPLE__)
   // Platform primitives re-check the value internally (futex returns on
   // spurious wakeups; Win32/Darwin wrap the load in a loop).
-  namespace sync = spscing::sync;
+  namespace sync = spscring::sync;
   sync::atomic_wait(atomic, old);
 #else
   atomic_poll(atomic, old);
@@ -55,7 +56,7 @@ inline void atomic_wait(const std::atomic<T>* atomic, T old) {
 template <typename T>
 inline bool atomic_wait_for(const std::atomic<T>* atomic, T old, int timeout_ms) {
 #if defined(__linux__) || defined(_WIN32) || defined(__APPLE__)
-  namespace sync = spscing::sync;
+  namespace sync = spscring::sync;
   return sync::atomic_wait_for(atomic, old, timeout_ms);
 #else
   const auto start = std::chrono::steady_clock::now();
@@ -73,7 +74,7 @@ inline bool atomic_wait_for(const std::atomic<T>* atomic, T old, int timeout_ms)
 template <typename T>
 inline void atomic_notify_one(const std::atomic<T>* atomic) {
 #if defined(__linux__) || defined(_WIN32) || defined(__APPLE__)
-  namespace sync = spscing::sync;
+  namespace sync = spscring::sync;
   sync::atomic_notify_one(atomic);
 #endif
 }
@@ -81,7 +82,7 @@ inline void atomic_notify_one(const std::atomic<T>* atomic) {
 template <typename T>
 inline void atomic_notify_all(const std::atomic<T>* atomic) {
 #if defined(__linux__) || defined(_WIN32) || defined(__APPLE__)
-  namespace sync = spscing::sync;
+  namespace sync = spscring::sync;
   sync::atomic_notify_all(atomic);
 #endif
 }
@@ -95,11 +96,11 @@ inline void atomic_notify_all(const std::atomic<T>* atomic) {
 template <typename T>
 inline bool atomic_notify_all_if_waiters(const std::atomic<T>* atomic) {
 #if defined(__linux__) || defined(_WIN32) || defined(__APPLE__)
-  namespace sync = spscing::sync;
+  namespace sync = spscring::sync;
   return sync::atomic_notify_all_if_waiters(atomic);
 #else
   return atomic->load(std::memory_order_acquire);
 #endif
 }
 
-}  // namespace spscing
+}  // namespace spscring

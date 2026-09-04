@@ -11,7 +11,7 @@
 #include <spscring/ring_view.hpp>
 #include <spscring/varlen_header.hpp>
 
-namespace spscing {
+namespace spscring {
 
 // Producer side of a variable-length SPSC ring. Two-phase publication:
 //
@@ -109,4 +109,4 @@ class varlen_writer final : public ring_view {
   atomic_backoff backoff_;
 };
 
-}  // namespace spscing
+}  // namespace spscring

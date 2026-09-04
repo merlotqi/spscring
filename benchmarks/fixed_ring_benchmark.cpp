@@ -32,23 +32,26 @@ struct fixed_ring_fixture {
   spscring::control_block* header() { return reinterpret_cast<spscring::control_block*>(storage.get()); }
 };
 
-// Single-threaded reserve+commit loop (upper bound for the hot path).
+// Single-threaded reserve+commit loop (upper bound for the hot path). The
+// consumer side drains in the same thread so the batch never stalls on a full
+// ring.
 void BM_FixedReserveCommit(benchmark::State& state) {
   fixed_ring_fixture fixture;
   spscring::fixed_writer writer{fixture.header()};
+  spscring::fixed_reader reader{fixture.header()};
 
   char payload[kItemSize]{};
+  char recv[kItemSize];
   for (auto _ : state) {
     for (std::uint64_t i = 0; i < kItemsPerBatch; ++i) {
-      // The ring is never drained here, so writes fail once full; wrap by
-      // restarting the benchmark item stream when reserve fails.
       void* slot = writer.try_reserve();
-      if (slot == nullptr) {
-        state.SkipWithError("ring full — benchmark bug");
-        return;
+      while (slot == nullptr) {
+        reader.read(recv, kItemSize);  // make room
+        slot = writer.try_reserve();
       }
       std::memcpy(slot, payload, kItemSize);
       writer.commit();
+      reader.read(recv, kItemSize);  // keep the ring mostly empty
     }
   }
   state.SetItemsProcessed(state.iterations() * kItemsPerBatch);

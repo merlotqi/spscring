@@ -10,7 +10,7 @@
 #include <spscring/ring_view.hpp>
 #include <spscring/varlen_header.hpp>
 
-namespace spscing {
+namespace spscring {
 
 // Consumer side of a variable-length SPSC ring. Pairs with varlen_writer.
 //
@@ -103,4 +103,4 @@ class varlen_reader final : public ring_view {
   }
 };
 
-}  // namespace spscing
+}  // namespace spscring

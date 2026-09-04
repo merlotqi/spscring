@@ -11,8 +11,9 @@
 namespace {
 
 TEST(ControlBlockTest, PinnedAbiLayout) {
-  using spscing::control_block;
-  using spscing::SPSCRING_CACHE_LINE_SIZE;
+  using spscring::control_block;
+  // SPSCRING_CACHE_LINE_SIZE is a preprocessor macro (64), not a namespace
+  // entity — used directly below.
 
   static_assert(sizeof(spscring::meta) == 4 * SPSCRING_CACHE_LINE_SIZE);
   static_assert(offsetof(control_block, rb_meta) == SPSCRING_CACHE_LINE_SIZE);
@@ -28,7 +29,7 @@ TEST(ControlBlockTest, PinnedAbiLayout) {
 }
 
 TEST(ControlBlockTest, InitAndValidateRoundTrip) {
-  spscing::control_block header{};
+  spscring::control_block header{};
   EXPECT_TRUE(spscring::init_control_block(header, 1024, spscring::layout_type::varlen, 8));
   EXPECT_TRUE(spscring::validate_control_block(header));
   EXPECT_EQ(header.magic, 0x53505343u);
@@ -41,7 +42,7 @@ TEST(ControlBlockTest, InitAndValidateRoundTrip) {
 }
 
 TEST(ControlBlockTest, InitRejectsBadGeometry) {
-  spscing::control_block header{};
+  spscring::control_block header{};
   // Zero alignment.
   EXPECT_FALSE(spscring::init_control_block(header, 1024, spscring::layout_type::fixed, 0, 64));
   // Non-power-of-two alignment.
@@ -55,18 +56,19 @@ TEST(ControlBlockTest, InitRejectsBadGeometry) {
 }
 
 TEST(ControlBlockTest, ValidateRejectsCorruption) {
-  spscing::control_block header{};
+  spscring::control_block header{};
   ASSERT_TRUE(spscring::init_control_block(header, 1024, spscring::layout_type::varlen, 8));
 
   header.magic = 0xdeadbeef;
   EXPECT_FALSE(spscring::validate_control_block(header));
 
-  header = {};
+  // std::atomic members make assignment deleted; re-initialize in place.
+  new (&header) spscring::control_block{};
   ASSERT_TRUE(spscring::init_control_block(header, 1024, spscring::layout_type::varlen, 8));
   header.version_major = 1;
   EXPECT_FALSE(spscring::validate_control_block(header));
 
-  header = {};
+  new (&header) spscring::control_block{};
   ASSERT_TRUE(spscring::init_control_block(header, 1024, spscring::layout_type::varlen, 8));
   header.header_size = 128;
   EXPECT_FALSE(spscring::validate_control_block(header));
@@ -79,7 +81,7 @@ TEST(ControlBlockTest, VarlenHeaderLayout) {
 }
 
 TEST(ControlBlockTest, VarlenValidationNormalizesLegacyAlignment) {
-  spscing::control_block header{};
+  spscring::control_block header{};
   header.magic = spscring::expected_magic;
   header.version_major = spscring::version_major;
   header.header_size = sizeof(spscring::control_block);

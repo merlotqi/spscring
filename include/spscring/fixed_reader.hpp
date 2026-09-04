@@ -7,7 +7,7 @@
 #include <spscring/control_block.hpp>
 #include <spscring/ring_view.hpp>
 
-namespace spscing {
+namespace spscring {
 
 // Consumer side of a fixed-size SPSC ring. Pairs with fixed_writer; reads are
 // non-copying (pointer + size view into the ring), valid until read_advance().
@@ -65,4 +65,4 @@ class fixed_reader final : public ring_view {
   std::size_t item_size() const noexcept { return static_cast<std::size_t>(header_->fixed_item_size); }
 };
 
-}  // namespace spscing
+}  // namespace spscring

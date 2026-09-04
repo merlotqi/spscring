@@ -1,4 +1,4 @@
-# spscing
+# spscring
 
 Header-only, dependency-free **single-producer / single-consumer (SPSC) lock-free
 ring buffers** in C++17, designed for cross-process shared-memory IPC.
@@ -79,7 +79,7 @@ FetchContent_Declare(spscring
   GIT_TAG        v0.1.0)
 FetchContent_MakeAvailable(spscring)
 
-target_link_libraries(my_target PRIVATE spscing::spscring)
+target_link_libraries(my_target PRIVATE spscring::spscring)
 ```
 
 ### Subproject / vendored

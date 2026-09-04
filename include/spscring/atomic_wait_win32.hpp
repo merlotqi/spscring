@@ -24,7 +24,7 @@
 #include <cwchar>
 #include <spscring/platform.hpp>
 
-namespace spscing {
+namespace spscring {
 namespace details {
 
 using WaitOnAddressFn = BOOL(WINAPI*)(volatile VOID*, PVOID, SIZE_T, DWORD);
@@ -163,6 +163,8 @@ inline void polling_wait(const std::atomic<T>* atomic, T old) {
 
 }  // namespace details
 
+namespace sync {
+
 // atomic_wait is a pure blocking primitive: spin/yield backoff belongs in
 // atomic_backoff. Callers should pause/yield before blocking.
 template <typename T>
@@ -230,6 +232,7 @@ inline bool atomic_notify_all_if_waiters(const std::atomic<T>*) {
   return true;
 }
 
-}  // namespace spscing
+}  // namespace sync
+}  // namespace spscring
 
 #endif  // _WIN32

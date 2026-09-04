@@ -6,7 +6,7 @@
 #include <spscring/control_block.hpp>
 #include <spscring/message_meta.hpp>
 
-namespace spscing {
+namespace spscring {
 
 // Slot layout for variable-length messages.
 //
@@ -47,4 +47,4 @@ inline bool validate_varlen_control_block(control_block& header) noexcept {
   return true;
 }
 
-}  // namespace spscing
+}  // namespace spscring

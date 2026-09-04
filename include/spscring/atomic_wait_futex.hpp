@@ -17,7 +17,8 @@
 #define FUTEX_WAKE_PRIVATE 129
 #endif
 
-namespace spscing {
+namespace spscring {
+namespace sync {
 
 namespace details {
 
@@ -75,6 +76,7 @@ inline bool atomic_notify_all_if_waiters(const std::atomic<T>*) {
   return true;
 }
 
-}  // namespace spscing
+}  // namespace sync
+}  // namespace spscring
 
 #endif  // __linux__

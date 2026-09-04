@@ -16,7 +16,7 @@ namespace {
 
 constexpr std::uint32_t kCapacity = 512;
 
-using varlen_arena = spscing_test::arena<kCapacity>;
+using varlen_arena = spscring_test::arena<kCapacity>;
 
 varlen_arena& make_ring() {
   static varlen_arena arena{};
@@ -87,7 +87,7 @@ TEST(VarlenRingTest, MixedSizesAndFifoOrder) {
 TEST(VarlenRingTest, SmallSegmentWrapUsesDummyHeader) {
   // 64 bytes capacity with 8-byte alignment: header (24) + 40-byte payload fits
   // exactly once; the next reserve must wrap via the dummy path.
-  spscing_test::arena<64> small{};
+  spscring_test::arena<64> small{};
   ASSERT_TRUE(small.init(spscring::layout_type::varlen, 8));
 
   spscring::varlen_writer writer{small.header()};

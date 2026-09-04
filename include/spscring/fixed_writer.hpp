@@ -8,7 +8,7 @@
 #include <spscring/control_block.hpp>
 #include <spscring/ring_view.hpp>
 
-namespace spscing {
+namespace spscring {
 
 // Producer side of a fixed-size SPSC ring. Every message occupies exactly
 // `item_size` bytes, so wraps are handled with a dummy write and the fast path
@@ -86,4 +86,4 @@ class fixed_writer final : public ring_view {
   }
 };
 
-}  // namespace spscing
+}  // namespace spscring

@@ -5,7 +5,7 @@
 #include <cstdint>
 #include <spscring/control_block.hpp>
 
-namespace spscing {
+namespace spscring {
 
 // Non-owning view over a ring: a control block followed by a data region in one
 // contiguous memory block (shared memory segment, heap arena, or stack buffer).
@@ -62,4 +62,4 @@ class ring_view {
   std::uint8_t* data_;
 };
 
-}  // namespace spscing
+}  // namespace spscring

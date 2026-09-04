@@ -19,7 +19,7 @@ constexpr std::uint32_t kItemSize = 64;
 constexpr std::uint32_t kItemCount = 8;
 constexpr std::uint32_t kCapacity = kItemSize * kItemCount;
 
-using fixed_arena = spscing_test::arena<kCapacity>;
+using fixed_arena = spscring_test::arena<kCapacity>;
 
 fixed_arena& make_ring() {
   static fixed_arena arena{};
@@ -27,7 +27,7 @@ fixed_arena& make_ring() {
 }
 
 TEST(FixedRingTest, InitRejectsNonMultipleCapacity) {
-  spscing_test::arena<100> arena{};
+  spscring_test::arena<100> arena{};
   // item_size 32 does not divide capacity 100.
   EXPECT_FALSE(arena.init(spscring::layout_type::fixed, 8, 32));
 }

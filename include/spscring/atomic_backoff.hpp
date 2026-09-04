@@ -6,7 +6,7 @@
 #include <spscring/atomic_wait.hpp>
 #include <spscring/platform.hpp>
 
-namespace spscing {
+namespace spscring {
 
 // Exponential backoff for lock-free contention: CPU pause hints, escalating to
 // thread yields, optionally finishing with a timed atomic wait.
@@ -45,4 +45,4 @@ class atomic_backoff {
   std::uint32_t max_pauses_;
 };
 
-}  // namespace spscing
+}  // namespace spscring

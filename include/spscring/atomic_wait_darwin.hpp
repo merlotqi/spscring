@@ -45,7 +45,7 @@
 extern "C" int __ulock_wait(uint32_t operation, void* addr, uint64_t value, uint64_t timeout);
 extern "C" int __ulock_wake(uint32_t operation, void* addr, uint64_t wake_value);
 
-namespace spscing {
+namespace spscring {
 namespace sync {
 
 namespace details {
@@ -182,6 +182,6 @@ inline bool atomic_notify_all_if_waiters(const std::atomic<T>*) {
 }
 
 }  // namespace sync
-}  // namespace spscing
+}  // namespace spscring
 
 #endif  // __APPLE__

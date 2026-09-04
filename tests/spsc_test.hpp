@@ -8,7 +8,7 @@
 
 #include <spscring/control_block.hpp>
 
-namespace spscing_test {
+namespace spscring_test {
 
 // Contiguous arena holding a control_block followed by a data region, aligned
 // to the cache line size so the pinned control-block offsets hold.
@@ -28,4 +28,4 @@ struct arena {
   }
 };
 
-}  // namespace spscing_test
+}  // namespace spscring_test

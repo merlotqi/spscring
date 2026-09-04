@@ -6,7 +6,7 @@
 #include <type_traits>
 #include <spscring/platform.hpp>
 
-namespace spscing {
+namespace spscring {
 
 // 0: fixed-size frames, 1: variable-length messages.
 enum class layout_type : std::uint32_t {
@@ -125,4 +125,4 @@ static_assert(offsetof(control_block, data_capacity) == 5 * SPSCRING_CACHE_LINE_
 static_assert(sizeof(control_block) == 6 * SPSCRING_CACHE_LINE_SIZE,
               "the data region must start on a 64-byte boundary");
 
-}  // namespace spscing
+}  // namespace spscring

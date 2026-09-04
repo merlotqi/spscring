@@ -2,7 +2,7 @@
 
 #include <cstdint>
 
-namespace spscing {
+namespace spscring {
 
 enum class reserve_status {
   ok = 0,
@@ -34,4 +34,4 @@ inline const char* reserve_status_cstr(reserve_status status) noexcept {
   }
 }
 
-}  // namespace spscing
+}  // namespace spscring

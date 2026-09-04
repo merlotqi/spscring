@@ -2,7 +2,7 @@
 
 #include <cstdint>
 
-namespace spscing {
+namespace spscring {
 
 // Per-message metadata stored in each slot header alongside the payload.
 struct message_meta {
@@ -22,4 +22,4 @@ enum message_flags : std::uint32_t {
 
 static_assert(sizeof(message_meta) == 24, "message_meta layout is part of the shared-memory ABI");
 
-}  // namespace spscing
+}  // namespace spscring
