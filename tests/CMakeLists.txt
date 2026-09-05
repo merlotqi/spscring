@@ -21,3 +21,5 @@ endfunction()
 spscring_gtest_executable(spscring_fixed_ring_test fixed_ring_test.cpp)
 spscring_gtest_executable(spscring_varlen_ring_test varlen_ring_test.cpp)
 spscring_gtest_executable(spscring_control_block_test control_block_test.cpp)
+spscring_gtest_executable(spscring_atomic_wait_test atomic_wait_test.cpp)
+
