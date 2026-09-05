@@ -22,7 +22,7 @@
 #include <atomic>
 #include <cstdint>
 #include <cwchar>
-#include <spscring/platform.hpp>
+#include <spscring/internal/platform.hpp>
 
 namespace spscring {
 namespace details {
