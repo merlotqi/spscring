@@ -8,19 +8,28 @@
 #include <cstring>
 #include <iostream>
 #include <memory>
+#include <new>
 #include <spscring/spscring.hpp>
 #include <string>
 
 namespace {
 
 // Any contiguous buffer works: heap, stack, or a shared memory mapping.
+// control_block is alignas(64), so the arena base must be 64-byte aligned —
+// plain new[] for std::byte only guarantees __STDCPP_DEFAULT_NEW_ALIGNMENT__.
 struct arena_t {
-  std::unique_ptr<std::byte[]> bytes;
+  std::byte* const bytes;
 
   explicit arena_t(std::size_t data_capacity)
-      : bytes(std::make_unique<std::byte[]>(sizeof(spscring::control_block) + data_capacity)) {}
+      : bytes(static_cast<std::byte*>(
+            ::operator new(sizeof(spscring::control_block) + data_capacity, std::align_val_t(64)))) {}
 
-  spscring::control_block* header() { return reinterpret_cast<spscring::control_block*>(bytes.get()); }
+  ~arena_t() { ::operator delete(bytes, std::align_val_t(64)); }
+
+  arena_t(const arena_t&) = delete;
+  arena_t& operator=(const arena_t&) = delete;
+
+  spscring::control_block* header() { return reinterpret_cast<spscring::control_block*>(bytes); }
 };
 
 void fixed_ring_demo() {

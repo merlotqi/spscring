@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 
 #include <atomic>
+#include <chrono>
 #include <cstdio>
 #include <cstring>
 #include <spscring/message_meta.hpp>
@@ -112,6 +113,50 @@ TEST(VarlenRingTest, SmallSegmentWrapUsesDummyHeader) {
   // After the drain the whole ring is usable again (the wrap padding that was
   // committed at the end has been consumed along with the real message).
   EXPECT_TRUE(writer.write(payload, sent));
+}
+
+TEST(VarlenRingTest, ProducerBlockedOnFullIsWokenByConsumer) {
+  spscring_test::arena<kCapacity> arena{};
+  ASSERT_TRUE(arena.init(spscring::layout_type::varlen, 8));
+
+  spscring::varlen_writer writer{arena.header()};
+  spscring::varlen_reader reader{arena.header()};
+
+  // Fill the ring until the producer reports full.
+  char blob[8]{};
+  unsigned fills = 0;
+  while (writer.write(static_cast<std::uint32_t>(sizeof(blob)), blob) && fills < 1000) {
+    ++fills;
+  }
+  ASSERT_GT(fills, 0u);
+  ASSERT_EQ(writer.try_reserve(1).status, spscring::reserve_status::full);  // confirmed full
+
+  spscring::control_block& hdr = *arena.header();
+  const std::uint32_t wake_before = hdr.rb_meta.read_wake_seq.load(std::memory_order_relaxed);
+
+  spscring::atomic_backoff backoff;
+  std::atomic<bool> woke{false};
+  std::thread producer([&] {
+    const spscring::reserve_result res = writer.try_reserve(4);
+    if (res.status == spscring::reserve_status::full) {
+      const std::uint32_t old = hdr.rb_meta.read_wake_seq.load(std::memory_order_acquire);
+      backoff.wait(&hdr.rb_meta.read_wake_seq, old, 1000);
+    }
+    if (writer.try_reserve(4).status == spscring::reserve_status::ok) {
+      // The point of the test is only that the wake word moved: the producer
+      // could reserve again after the consumer drained a slot.
+    }
+    woke.store(true, std::memory_order_release);
+  });
+
+  std::this_thread::sleep_for(std::chrono::milliseconds(50));
+  char recv[16];
+  std::uint32_t recv_size = 0;
+  ASSERT_TRUE(reader.read(recv, sizeof(recv), &recv_size));
+
+  producer.join();
+  EXPECT_TRUE(woke.load(std::memory_order_acquire));
+  EXPECT_GT(hdr.rb_meta.read_wake_seq.load(std::memory_order_relaxed), wake_before);
 }
 
 TEST(VarlenRingTest, TwoPhaseReserveCommit) {

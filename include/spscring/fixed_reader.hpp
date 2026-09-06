@@ -52,6 +52,10 @@ class fixed_reader final : public ring_view {
   void read_advance(std::size_t n = 1) noexcept {
     control_block& hdr = *header_;
     hdr.rb_meta.read_pos.fetch_add(static_cast<std::uint64_t>(n) * hdr.fixed_item_size, std::memory_order_seq_cst);
+    // Bump the producer wakeup word so producers waiting on it (futex /
+    // WaitOnAddress compare the value, they do not loop on the notify alone)
+    // escape, then wake them.
+    hdr.rb_meta.read_wake_seq.fetch_add(1, std::memory_order_seq_cst);
     atomic_notify_all(&hdr.rb_meta.read_wake_seq);
   }
 

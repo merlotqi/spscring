@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 
 #include <atomic>
+#include <chrono>
 #include <cstdio>
 #include <cstring>
 #include <numeric>
@@ -128,6 +129,52 @@ TEST(FixedRingTest, RepeatedWrapPassesKeepOrder) {
       EXPECT_EQ(recv[0], static_cast<char>(i ^ pass));
     }
   }
+}
+
+TEST(FixedRingTest, ProducerBlockedOnReadWakeSeqIsWoken) {
+  spscring_test::arena<kCapacity> arena{};
+  ASSERT_TRUE(arena.init(spscring::layout_type::fixed, 64, kItemSize));
+
+  spscring::fixed_writer writer{arena.header()};
+  spscring::fixed_reader reader{arena.header()};
+
+  // Fill the ring completely so the producer has to wait.
+  char sent[kItemSize]{};
+  for (std::uint32_t i = 0; i < kItemCount; ++i) {
+    EXPECT_TRUE(writer.write(sent, kItemSize));
+  }
+  EXPECT_FALSE(writer.write(sent, kItemSize));  // full now
+
+  spscring::control_block& hdr = *arena.header();
+  const std::uint32_t wake_before = hdr.rb_meta.read_wake_seq.load(std::memory_order_relaxed);
+
+  // A producer that must be released by the consumer's read_advance:
+  // read_wake_seq must be bumped and the parked thread woken.
+  spscring::atomic_backoff backoff;
+  std::atomic<bool> woke{false};
+  std::thread producer([&] {
+    void* slot = nullptr;
+    while (slot == nullptr) {
+      slot = writer.try_reserve();
+      if (slot == nullptr) {
+        const std::uint32_t old = hdr.rb_meta.read_wake_seq.load(std::memory_order_acquire);
+        backoff.wait(&hdr.rb_meta.read_wake_seq, old, 1000);
+      }
+    }
+    std::memcpy(slot, sent, kItemSize);
+    writer.commit();
+    woke.store(true, std::memory_order_release);
+  });
+
+  // Give the producer a chance to block, then free exactly one slot.
+  std::this_thread::sleep_for(std::chrono::milliseconds(50));
+  char recv[kItemSize]{};
+  ASSERT_TRUE(reader.read(recv, kItemSize));
+
+  producer.join();
+  EXPECT_TRUE(woke.load(std::memory_order_acquire));
+  // read_advance must bump the producer wakeup word, not only notify.
+  EXPECT_GT(hdr.rb_meta.read_wake_seq.load(std::memory_order_relaxed), wake_before);
 }
 
 TEST(FixedRingTest, SPSCThreadedStress) {
