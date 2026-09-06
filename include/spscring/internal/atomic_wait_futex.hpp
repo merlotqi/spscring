@@ -41,13 +41,19 @@ inline void atomic_wait(const std::atomic<T>* atomic, T expected) {
 }
 
 // Blocks with a timeout; returns false when the call timed out, true when the
-// value may have changed. The caller must always re-check the value.
+// value may have changed. A negative timeout means "wait indefinitely" (futex
+// semantics: pass a null timespec so the kernel never returns ETIMEDOUT). The
+// caller must always re-check the value.
 template <typename T>
 inline bool atomic_wait_for(const std::atomic<T>* atomic, T expected, int timeout_ms) {
   static_assert(sizeof(T) == 4, "atomic_wait_for(futex): only 32-bit atomics are supported");
   auto* addr = reinterpret_cast<int*>(const_cast<std::atomic<T>*>(atomic));
   if (atomic->load(std::memory_order_acquire) != expected) {
     return true;
+  }
+  if (timeout_ms < 0) {
+    details::futex_syscall(addr, FUTEX_WAIT_PRIVATE, static_cast<int>(expected), nullptr);
+    return true;  // Woken or spurious — the caller re-checks the value.
   }
   timespec ts{};
   ts.tv_sec = timeout_ms / 1000;

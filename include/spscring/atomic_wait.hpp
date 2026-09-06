@@ -7,7 +7,6 @@
 //   other  - C++11 std::atomic_wait-style polling (atomic_poll)
 
 #include <atomic>
-#include <chrono>
 #include <cstdint>
 #include <spscring/internal/platform.hpp>
 #include <thread>
@@ -58,6 +57,11 @@ inline bool atomic_wait_for(const std::atomic<T>* atomic, T old, int timeout_ms)
   namespace sync = spscring::sync;
   return sync::atomic_wait_for(atomic, old, timeout_ms);
 #else
+  // Negative timeout means "wait indefinitely" (futex semantics).
+  if (timeout_ms < 0) {
+    atomic_poll(atomic, old);
+    return true;
+  }
   const auto start = std::chrono::steady_clock::now();
   const auto deadline = start + std::chrono::milliseconds(timeout_ms);
   while (atomic->load(std::memory_order_acquire) == old) {

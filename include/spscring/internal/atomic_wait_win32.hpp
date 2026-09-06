@@ -22,6 +22,7 @@
 #include <atomic>
 #include <cstdint>
 #include <cwchar>
+#include <algorithm>
 #include <spscring/internal/platform.hpp>
 
 namespace spscring {
@@ -187,10 +188,13 @@ template <typename T>
 inline bool atomic_wait_for(const std::atomic<T>* atomic, T old, int timeout_ms) {
   static_assert(sizeof(T) <= 8, "atomic_wait_for(win32): only 64-bit or smaller atomics are supported");
 
+  // A negative timeout means "wait indefinitely" (futex semantics).
+  const bool indefinite = timeout_ms < 0;
+
   if (!details::has_native_wait_api()) {
     const DWORD start = ::GetTickCount();
     while (atomic->load(std::memory_order_acquire) == old) {
-      if (static_cast<int>(::GetTickCount() - start) >= timeout_ms) {
+      if (!indefinite && static_cast<int>(::GetTickCount() - start) >= timeout_ms) {
         return false;
       }
       details::polling_wait(atomic, old);
@@ -199,11 +203,15 @@ inline bool atomic_wait_for(const std::atomic<T>* atomic, T old, int timeout_ms)
   }
 
   const details::wait_api& api = details::native_wait_api();
+  const DWORD wait_ms = indefinite ? INFINITE : static_cast<DWORD>(timeout_ms > 0 ? timeout_ms : 0);
   while (atomic->load(std::memory_order_acquire) == old) {
-    const BOOL ok = api.wait_on_address(details::wait_address(atomic), &old, sizeof(T),
-                                        static_cast<DWORD>(timeout_ms > 0 ? timeout_ms : 1));
+    const BOOL ok = api.wait_on_address(details::wait_address(atomic), &old, sizeof(T), wait_ms);
     if (!ok && ::GetLastError() == ERROR_TIMEOUT) {
-      return atomic->load(std::memory_order_acquire) != old;
+      // Only an explicitly requested finite timeout is a real timeout; an
+      // indefinite wait (INFINITE) cannot expire here.
+      if (!indefinite) {
+        return atomic->load(std::memory_order_acquire) != old;
+      }
     }
   }
   return true;

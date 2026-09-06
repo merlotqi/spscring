@@ -2,10 +2,10 @@
 
 #include <atomic>
 #include <cstdint>
+#include <cstring>
 #include <spscring/atomic_backoff.hpp>
 #include <spscring/control_block.hpp>
 #include <spscring/ring_view.hpp>
-#include <type_traits>
 
 namespace spscring {
 
@@ -61,7 +61,7 @@ class fixed_reader final : public ring_view {
     if (slot == nullptr) {
       return false;
     }
-    __builtin_memcpy(out, slot, size);
+    std::memcpy(out, slot, size);
     read_advance(1);
     return true;
   }

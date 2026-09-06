@@ -21,6 +21,13 @@ target_include_directories(spscring INTERFACE
     $<INSTALL_INTERFACE:include>
 )
 
+if(MSVC)
+    # The public headers are UTF-8 and contain non-ASCII comment characters; make
+    # sure consumers compiling on MSVC interpret them as UTF-8 instead of the
+    # active code page (which would raise C4819 and could corrupt them).
+    target_compile_options(spscring INTERFACE $<$<COMPILE_LANGUAGE:CXX>:/utf-8>)
+endif()
+
 if(SPSCRING_SANITIZE)
     spscring_enable_sanitizers(spscring "${SPSCRING_SANITIZE}")
 endif()

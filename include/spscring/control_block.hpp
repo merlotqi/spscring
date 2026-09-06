@@ -126,8 +126,23 @@ inline bool validate_control_block(const control_block& header) noexcept {
 // ABI pins: changing any of these is a breaking change for mapped segments and
 // requires bumping version_major/minor.
 static_assert(std::is_standard_layout_v<control_block>, "control_block must stay standard-layout (shared-memory ABI)");
+// MSVC's <atomic> implementation is not reported trivially copyable (STL quirk)
+// even though the lock-free atomics used here are layout-identical to their raw
+// integer type, so the strong pin is only enforced where the standard library
+// guarantees it (libstdc++/libc++). On MSVC the ABI is pinned by the
+// standard-layout trait plus the sizeof/alignof layout checks below and the
+// sizeof(meta)/offsetof/offsetof checks above.
+#if defined(_MSC_VER)
+static_assert(sizeof(std::atomic<std::uint64_t>) == sizeof(std::uint64_t) &&
+                  alignof(std::atomic<std::uint64_t>) == alignof(std::uint64_t),
+              "std::atomic<uint64_t> must be layout-compatible with uint64_t (shared-memory ABI)");
+static_assert(sizeof(std::atomic<std::uint32_t>) == sizeof(std::uint32_t) &&
+                  alignof(std::atomic<std::uint32_t>) == alignof(std::uint32_t),
+              "std::atomic<uint32_t> must be layout-compatible with uint32_t (shared-memory ABI)");
+#else
 static_assert(std::is_trivially_copyable_v<control_block>,
               "control_block must stay trivially copyable (shared-memory ABI)");
+#endif
 static_assert(sizeof(meta) == 3 * SPSCRING_CACHE_LINE_SIZE, "meta must be exactly three cache lines");
 static_assert(offsetof(control_block, rb_meta) == SPSCRING_CACHE_LINE_SIZE,
               "rb_meta must start on the second cache line");

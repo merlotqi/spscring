@@ -8,7 +8,6 @@
 #include <spscring/internal/varlen_header.hpp>
 #include <spscring/message_meta.hpp>
 #include <spscring/ring_view.hpp>
-#include <type_traits>
 
 namespace spscring {
 
@@ -85,7 +84,7 @@ class varlen_reader final : public ring_view {
         if (size > max_size) {
           return false;  // Caller buffer too small: keep the message.
         }
-        __builtin_memcpy(out, payload, size);
+        std::memcpy(out, payload, size);
       }
       return true;
     });

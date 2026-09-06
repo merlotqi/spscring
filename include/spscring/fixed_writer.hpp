@@ -3,10 +3,10 @@
 #include <atomic>
 #include <cstdint>
 #include <cstdlib>
+#include <cstring>
 #include <spscring/atomic_backoff.hpp>
 #include <spscring/control_block.hpp>
 #include <spscring/ring_view.hpp>
-#include <type_traits>
 
 namespace spscring {
 
@@ -78,7 +78,7 @@ class fixed_writer final : public ring_view {
       return false;
     }
     if (size > 0) {
-      __builtin_memcpy(slot, data, size);
+      std::memcpy(slot, data, size);
     }
     commit();
     return true;

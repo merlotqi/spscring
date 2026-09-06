@@ -9,7 +9,6 @@
 #include <spscring/message_meta.hpp>
 #include <spscring/reserve_result.hpp>
 #include <spscring/ring_view.hpp>
-#include <type_traits>
 
 namespace spscring {
 
@@ -86,7 +85,7 @@ class varlen_writer final : public ring_view {
   reserve_result reserve_and_copy(std::uint32_t payload_size, const void* data, const message_meta& meta = {}) {
     reserve_result result = try_reserve(payload_size, meta);
     if (result.status == reserve_status::ok && payload_size > 0 && data != nullptr) {
-      __builtin_memcpy(result.payload, data, payload_size);
+      std::memcpy(result.payload, data, payload_size);
     }
     return result;
   }
