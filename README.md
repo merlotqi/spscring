@@ -22,7 +22,7 @@ powers the inter-process message channel.
   (`pause` → `yield` → platform wait):
   | OS | primitive |
   |---|---|
-  | Linux | `futex(FUTEX_WAIT_PRIVATE)` |
+  | Linux | `futex(FUTEX_WAIT)` |
   | Windows | `WaitOnAddress` / `WakeByAddress*` (polling fallback) |
   | macOS 14.4+ | `os_sync_wait_on_address` (cross-process, `SHARED` flag) |
   | macOS < 14.4 | `__ulock_wait` with 50 ms re-check loop |

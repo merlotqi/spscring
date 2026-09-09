@@ -11,13 +11,6 @@
 #include <atomic>
 #include <cstdint>
 
-#ifndef FUTEX_WAIT_PRIVATE
-#define FUTEX_WAIT_PRIVATE 128
-#endif
-#ifndef FUTEX_WAKE_PRIVATE
-#define FUTEX_WAKE_PRIVATE 129
-#endif
-
 namespace spscring {
 namespace sync {
 
@@ -36,7 +29,7 @@ inline void atomic_wait(const std::atomic<T>* atomic, T expected) {
   static_assert(sizeof(T) == 4, "atomic_wait(futex): only 32-bit atomics are supported");
   auto* addr = reinterpret_cast<int*>(const_cast<std::atomic<T>*>(atomic));
   while (atomic->load(std::memory_order_acquire) == expected) {
-    details::futex_syscall(addr, FUTEX_WAIT_PRIVATE, static_cast<int>(expected), nullptr);
+    details::futex_syscall(addr, FUTEX_WAIT, static_cast<int>(expected), nullptr);
   }
 }
 
@@ -52,13 +45,13 @@ inline bool atomic_wait_for(const std::atomic<T>* atomic, T expected, int timeou
     return true;
   }
   if (timeout_ms < 0) {
-    details::futex_syscall(addr, FUTEX_WAIT_PRIVATE, static_cast<int>(expected), nullptr);
+    details::futex_syscall(addr, FUTEX_WAIT, static_cast<int>(expected), nullptr);
     return true;  // Woken or spurious — the caller re-checks the value.
   }
   timespec ts{};
   ts.tv_sec = timeout_ms / 1000;
   ts.tv_nsec = static_cast<long>(timeout_ms % 1000) * 1000000L;
-  const long rc = details::futex_syscall(addr, FUTEX_WAIT_PRIVATE, static_cast<int>(expected), &ts);
+  const long rc = details::futex_syscall(addr, FUTEX_WAIT, static_cast<int>(expected), &ts);
   return !(rc != 0 && errno == ETIMEDOUT);
 }
 
@@ -66,14 +59,14 @@ template <typename T>
 inline void atomic_notify_one(const std::atomic<T>* atomic) {
   static_assert(sizeof(T) == 4, "atomic_notify_one(futex): only 32-bit atomics are supported");
   auto* addr = reinterpret_cast<int*>(const_cast<std::atomic<T>*>(atomic));
-  details::futex_syscall(addr, FUTEX_WAKE_PRIVATE, 1);
+  details::futex_syscall(addr, FUTEX_WAKE, 1);
 }
 
 template <typename T>
 inline void atomic_notify_all(const std::atomic<T>* atomic) {
   static_assert(sizeof(T) == 4, "atomic_notify_all(futex): only 32-bit atomics are supported");
   auto* addr = reinterpret_cast<int*>(const_cast<std::atomic<T>*>(atomic));
-  details::futex_syscall(addr, FUTEX_WAKE_PRIVATE, INT32_MAX);
+  details::futex_syscall(addr, FUTEX_WAKE, INT32_MAX);
 }
 
 template <typename T>

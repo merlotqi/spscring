@@ -117,7 +117,7 @@ platform wait. Platform mapping of the wait words:
 
 | OS      | wait primitive                                | cross-process |
 |---------|-----------------------------------------------|---------------|
-| Linux   | `futex(FUTEX_WAIT_PRIVATE)`                   | yes (physical page based) |
+| Linux   | `futex(FUTEX_WAIT)`                           | yes (shared futex key) |
 | Win32   | `WaitOnAddress` / `WakeByAddress*`            | yes (address based) |
 | macOS ≥14.4 | `os_sync_wait_on_address(SHARED)`         | yes (`_SHARED` flag) |
 | macOS <14.4 | `__ulock_wait` + 50 ms re-check loop      | degraded (VA based) |
