@@ -21,7 +21,7 @@ offset  content                              size
 |------------------|--------|---------------------------------------|
 | magic            | 0      | `0x53505343` ("SPSC")                 |
 | version_major    | 4      | 0                                     |
-| version_minor    | 6      | 1                                     |
+| version_minor    | 6      | 2 (waiter flag in notify words)       |
 | header_size      | 8      | `sizeof(control_block)`               |
 | layout_type      | 12     | `fixed` (0) / `varlen` (1)            |
 | reserved0        | 16     | 0                                     |
@@ -53,8 +53,10 @@ breaking ABI change and must bump the version.
     only chase this, so a reserved-but-unfinished slot is never observable.
   - `read_pos` — advanced after a message is consumed.
 - The 32-bit sequence words exist purely to block/wake: they double as futex
-  words on Linux and `WaitOnAddress` words on Windows. Cache-line ownership
-  follows the writer: line 0 producer, line 1 consumer, line 2 producer.
+  words on Linux and `WaitOnAddress` words on Windows, with a waiter flag
+  packed into bit 31 (see the notify_word protocol in section 5). Cache-line
+  ownership follows the writer: line 0 producer, line 1 consumer, line 2
+  producer.
 
 ## 2. Fixed ring
 
@@ -70,8 +72,9 @@ Producer fast path (`fixed_writer::try_reserve`):
 4. return pointer to the slot
 
 Publication (`commit`): `commit_pos.store(reserved_end, release)` — this is
-what makes the slot observable — followed by `commit_seq.fetch_add` (seq_cst)
-and a notify-all on `commit_seq` for blocked consumers.
+what makes the slot observable — followed by `bump_notify_word` (seq_cst) and
+a notify-all on `commit_seq` only when a consumer registered on the word
+(section 5).
 
 Consumer (`fixed_reader::try_read`): load `read_pos` relaxed / `commit_pos`
 acquire; if `commit_pos <= read_pos` the ring is empty; otherwise return the
@@ -123,9 +126,31 @@ platform wait. Platform mapping of the wait words:
 | macOS <14.4 | `__ulock_wait` + 50 ms re-check loop      | degraded (VA based) |
 | other   | polling (`atomic_poll`)                       | n/a |
 
-Consumers block on `commit_seq`, producers on `read_wake_seq`. Notify calls are
-cheap no-ops when nobody waits; the `atomic_notify_all_if_waiters` predicate
-exists for parity on platforms where the C++11 fallback would need a recheck.
+Consumers block on `commit_seq`, producers on `read_wake_seq`.
+
+### Conditional wakes (notify_word protocol)
+
+Each notify word packs a **waiter flag into bit 31** and the free-running wake
+sequence into bits 0..30 (`notify_seq_value` strips the flag; ABI
+`version_minor` 2). The protocols in `notify_word.hpp`:
+
+- **Waiter** (`wait_for_seq_change` / `wait_on_notify_word`): set the bit
+  (`fetch_or`), re-check the wake predicate, block in the platform wait with
+  the full word as the expected value, clear the bit on exit.
+- **Bumper** (`bump_notify_word`): `fetch_add(1)` publishes the state change
+  and returns whether the previous word had the waiter bit — the wake syscall
+  (`atomic_notify_all`) is issued **only then**.
+
+No lost wakeups: both sides RMW the same word, and same-word RMWs are totally
+coherently ordered. If registration precedes the bump, the bumper sees the bit
+and wakes; if it follows, the marked value already contains the new sequence
+so the waiter's post-registration predicate re-check observes progress and
+never sleeps; in between, the kernel's value check rejects the futex wait.
+
+Counter overflow (bit 30 carry) can only set a spurious waiter bit — one
+harmless extra wake. At most one waiter per word exists under SPSC discipline;
+racing registrars are tolerated (only a registrar that observed the bit unset
+clears it).
 
 ## 6. Validation contract
 
@@ -133,7 +158,11 @@ exists for parity on platforms where the C++11 fallback would need a recheck.
 [1, 64], zero capacity, capacity not a multiple of alignment). A peer that
 attaches to an existing segment must call `validate_control_block` and then
 compare `data_capacity` / `layout_type` / `fixed_item_size` against its own
-expectations — the library cannot know what the peer intended.
+expectations — the library cannot know what the peer intended. Fixed rings
+have a stricter pre-flight check, `is_valid_fixed_ring` (layout, non-zero item
+size, capacity an exact multiple of the item size); the `fixed_writer`
+constructor aborts when it is violated because the slot invariant cannot be
+maintained.
 
 ## 7. Provenance and deviations from xproc
 

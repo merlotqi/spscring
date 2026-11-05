@@ -71,7 +71,9 @@ struct SPSCRING_ALIGNAS_CACHE_LINE control_block {
 
 inline constexpr std::uint32_t expected_magic = 0x53505343;  // "SPSC"
 inline constexpr std::uint16_t version_major = 0;
-inline constexpr std::uint32_t version_minor = 1;
+// 1: original layout. 2: notify words (commit_seq / read_wake_seq) pack a
+// waiter flag into bit 31 — see notify_word.hpp. Struct offsets/sizes unchanged.
+inline constexpr std::uint32_t version_minor = 2;
 
 // The data region starts at header + sizeof(control_block), which is a 64-byte
 // boundary; slot alignment above 64 bytes is therefore not supported.

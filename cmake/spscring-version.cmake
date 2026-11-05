@@ -5,7 +5,7 @@
 # Bump these when cutting a release and tag it in git.
 
 set(SPSCRING_VERSION_MAJOR 0)
-set(SPSCRING_VERSION_MINOR 1)
+set(SPSCRING_VERSION_MINOR 2)
 set(SPSCRING_VERSION_PATCH 0)
 
 set(SPSCRING_VERSION

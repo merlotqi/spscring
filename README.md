@@ -9,8 +9,8 @@ powers the inter-process message channel.
 ## Features
 
 - **Two layouts**
-  - *fixed ring* — constant-size frames, one CAS per reserve, wrap handled with
-    a dummy write
+  - *fixed ring* — constant-size frames, one relaxed store per reserve (single
+    producer), wrap handled with a dummy write
   - *varlen ring* — variable-length messages with a self-describing slot header
     (`slot_size` + payload), supporting arbitrary sizes up to the ring capacity
 - **Shared-memory first**: the `control_block` is a pinned standard-layout ABI
@@ -18,6 +18,10 @@ powers the inter-process message channel.
   writers and readers only exchange atomic counters, never pointers
 - **Syscall-free fast path**: 64-bit monotonic logical byte offsets (no ABA),
   two-phase publication (`reserve` → `commit` via release/acquire)
+- **Conditional wakes**: blocked peers register on the notify word (waiter flag
+  in bit 31 of `commit_seq` / `read_wake_seq`, see `notify_word.hpp`); commits
+  and reads issue the wake syscall only when someone is actually blocked —
+  the uncontended path stays in user space on both sides
 - **Blocking without burning CPU**: exponential backoff
   (`pause` → `yield` → platform wait):
   | OS | primitive |

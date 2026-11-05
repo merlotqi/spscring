@@ -4,9 +4,11 @@
 #include <cstdint>
 #include <cstring>
 #include <spscring/atomic_backoff.hpp>
+#include <spscring/atomic_wait.hpp>
 #include <spscring/control_block.hpp>
 #include <spscring/internal/varlen_header.hpp>
 #include <spscring/message_meta.hpp>
+#include <spscring/notify_word.hpp>
 #include <spscring/ring_view.hpp>
 
 namespace spscring {
@@ -50,8 +52,9 @@ class varlen_reader final : public ring_view {
         // Wrap padding committed by the producer to reach the ring start:
         // skip it without consulting the handler.
         hdr.rb_meta.read_pos.store(read_pos + slot->slot_size, std::memory_order_seq_cst);
-        hdr.rb_meta.read_wake_seq.fetch_add(1, std::memory_order_seq_cst);
-        atomic_notify_all(&hdr.rb_meta.read_wake_seq);
+        if (bump_notify_word(hdr.rb_meta.read_wake_seq)) {
+          atomic_notify_all(&hdr.rb_meta.read_wake_seq);
+        }
         continue;
       }
 
@@ -63,8 +66,9 @@ class varlen_reader final : public ring_view {
 
       if (handler(payload, payload_arg, const_cast<message_meta&>(meta), reserved)) {
         hdr.rb_meta.read_pos.store(read_pos + slot->slot_size, std::memory_order_seq_cst);
-        hdr.rb_meta.read_wake_seq.fetch_add(1, std::memory_order_seq_cst);
-        atomic_notify_all(&hdr.rb_meta.read_wake_seq);
+        if (bump_notify_word(hdr.rb_meta.read_wake_seq)) {
+          atomic_notify_all(&hdr.rb_meta.read_wake_seq);
+        }
         return true;
       }
       // Handler declined: message stays available for the next read() call.

@@ -4,9 +4,11 @@
 #include <cstdint>
 #include <cstring>
 #include <spscring/atomic_backoff.hpp>
+#include <spscring/atomic_wait.hpp>
 #include <spscring/control_block.hpp>
 #include <spscring/internal/varlen_header.hpp>
 #include <spscring/message_meta.hpp>
+#include <spscring/notify_word.hpp>
 #include <spscring/reserve_result.hpp>
 #include <spscring/ring_view.hpp>
 
@@ -25,8 +27,15 @@ class varlen_writer final : public ring_view {
   explicit varlen_writer(control_block* header) : ring_view(header) {}
 
   // Reserves room for payload_size bytes. Returns reserve_status::full when
-  // fewer than header+payload bytes are available anywhere in the ring.
+  // fewer than header+payload bytes are available anywhere in the ring, and
+  // reserve_status::pending_commit when a previously reserved slot is still
+  // uncommitted (misuse guard: the wrap-padding path below commits
+  // immediately and would jump commit_pos past the uncommitted slot; only one
+  // reservation may be outstanding at a time).
   reserve_result try_reserve(std::uint32_t payload_size, const message_meta& meta = {}) noexcept {
+    if (pending_) {
+      return {reserve_status::pending_commit, nullptr, 0};
+    }
     const std::uint32_t align = header_->data_alignment;
     const std::uint32_t needed = align_up_u32(varlen_slot_header_size + payload_size, align);
     if (needed > header_->data_capacity) {
@@ -55,10 +64,12 @@ class varlen_writer final : public ring_view {
           auto* dummy = reinterpret_cast<varlen_slot_header*>(data_ + head_index);
           *dummy = varlen_slot_header{static_cast<std::uint32_t>(wrap_padding), 0, message_meta{}};
           // Publish the padding slot immediately (nothing else is in flight
-          // between reserve and commit within this call).
+          // between reserve and commit within this call; pending_ is still
+          // false here, so this cannot skip a live reservation).
           hdr.rb_meta.commit_pos.store(new_head, std::memory_order_release);
-          hdr.rb_meta.commit_seq.fetch_add(1, std::memory_order_seq_cst);
-          atomic_notify_all(&hdr.rb_meta.commit_seq);
+          if (bump_notify_word(hdr.rb_meta.commit_seq)) {
+            atomic_notify_all(&hdr.rb_meta.commit_seq);
+          }
           head = new_head;
           continue;  // Re-check capacity from the start; the CAS consumed space.
         }
@@ -77,6 +88,8 @@ class varlen_writer final : public ring_view {
       auto* slot = reinterpret_cast<varlen_slot_header*>(data_ + head_index);
       *slot = varlen_slot_header{needed, payload_size, meta};
 
+      pending_ = true;
+      last_position_ = head;
       return {reserve_status::ok, data_ + head_index + varlen_slot_header_size, head};
     }
   }
@@ -91,17 +104,25 @@ class varlen_writer final : public ring_view {
   }
 
   // Makes the slot at `position` (from a successful try_reserve) visible by
-  // advancing commit_pos (release) to the end of that slot, then waking
-  // consumers via the 32-bit notify counter.
+  // advancing commit_pos (release), then waking consumers via the notify word
+  // — only when one is registered (see notify_word.hpp). A no-op when no
+  // reservation is pending or when `position` does not match the outstanding
+  // reservation (stale/foreign positions must never move commit_pos, which
+  // would skip or rewind the consumer front); the reservation stays pending.
   void commit(std::uint64_t position) noexcept {
+    if (!pending_ || position != last_position_) {
+      return;
+    }
     control_block& hdr = *header_;
     // The slot header at `position` was written by this same producer thread,
     // so a relaxed load of its size is safe. commit_pos publishes both the
     // header and the payload writes to the consumer (acquire side).
     const auto* slot = reinterpret_cast<const varlen_slot_header*>(data_ + (position % hdr.data_capacity));
     hdr.rb_meta.commit_pos.store(position + slot->slot_size, std::memory_order_release);
-    hdr.rb_meta.commit_seq.fetch_add(1, std::memory_order_seq_cst);
-    atomic_notify_all(&hdr.rb_meta.commit_seq);
+    pending_ = false;
+    if (bump_notify_word(hdr.rb_meta.commit_seq)) {
+      atomic_notify_all(&hdr.rb_meta.commit_seq);
+    }
   }
 
   // Single-shot convenience: reserve + copy + commit.
@@ -116,6 +137,9 @@ class varlen_writer final : public ring_view {
 
  private:
   atomic_backoff backoff_;
+  // Single-outstanding-reservation guard (see try_reserve / commit).
+  bool pending_{false};
+  std::uint64_t last_position_{0};
 };
 
 }  // namespace spscring

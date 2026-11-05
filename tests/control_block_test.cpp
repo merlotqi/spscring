@@ -92,6 +92,12 @@ TEST(ControlBlockTest, VarlenValidationNormalizesLegacyAlignment) {
   EXPECT_EQ(header.data_alignment, 8u);
 }
 
+TEST(ControlBlockTest, NotifyWordSemanticsAreVersionTwo) {
+  // Bit 31 of each notify word carries the waiter flag (see notify_word.hpp);
+  // that semantic change is pinned by version_minor 2.
+  EXPECT_EQ(spscring::version_minor, 2u);
+}
+
 TEST(ReserveResultTest, BoolConversion) {
   spscring::reserve_result ok{};
   ok.status = spscring::reserve_status::ok;
@@ -102,6 +108,7 @@ TEST(ReserveResultTest, BoolConversion) {
   EXPECT_FALSE(static_cast<bool>(full));
 
   EXPECT_STREQ(spscring::reserve_status_cstr(spscring::reserve_status::message_too_large), "message_too_large");
+  EXPECT_STREQ(spscring::reserve_status_cstr(spscring::reserve_status::pending_commit), "pending_commit");
 }
 
 }  // namespace

@@ -8,7 +8,8 @@ enum class reserve_status {
   ok = 0,
   full,
   timeout,
-  message_too_large
+  message_too_large,
+  pending_commit
 };
 
 struct reserve_result {
@@ -29,6 +30,8 @@ inline const char* reserve_status_cstr(reserve_status status) noexcept {
       return "timeout";
     case reserve_status::message_too_large:
       return "message_too_large";
+    case reserve_status::pending_commit:
+      return "pending_commit";
     default:
       return "unknown";
   }

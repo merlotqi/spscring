@@ -244,4 +244,69 @@ TEST(VarlenRingTest, SPSCThreadedStress) {
   }
 }
 
+TEST(VarlenRingTest, SecondReserveWhilePendingIsRejected) {
+  varlen_arena& arena = make_ring();
+  ASSERT_TRUE(arena.init(spscring::layout_type::varlen, 8));
+
+  spscring::varlen_writer writer{arena.header()};
+  const auto first = writer.try_reserve(16);
+  ASSERT_TRUE(static_cast<bool>(first));
+
+  // A second outstanding reservation would let a wrap-padding commit skip past
+  // the still-uncommitted slot; it must be rejected instead.
+  const auto second = writer.try_reserve(16);
+  EXPECT_EQ(second.status, spscring::reserve_status::pending_commit);
+  EXPECT_EQ(second.payload, nullptr);
+}
+
+TEST(VarlenRingTest, PendingReservationCommitsThenRecovers) {
+  varlen_arena& arena = make_ring();
+  ASSERT_TRUE(arena.init(spscring::layout_type::varlen, 8));
+
+  spscring::varlen_writer writer{arena.header()};
+  spscring::varlen_reader reader{arena.header()};
+
+  const auto first = writer.try_reserve(16);
+  ASSERT_TRUE(static_cast<bool>(first));
+  EXPECT_EQ(writer.try_reserve(16).status, spscring::reserve_status::pending_commit);
+
+  std::memcpy(first.payload, "pending-guard", 14);
+  writer.commit(first.position);
+
+  char recv[32]{};
+  std::uint32_t recv_len = 0;
+  ASSERT_TRUE(reader.read(recv, sizeof(recv), &recv_len));
+  EXPECT_EQ(recv_len, 16u);
+  EXPECT_STREQ(recv, "pending-guard");
+
+  // After the commit the writer accepts new reservations again.
+  const auto next = writer.try_reserve(8);
+  EXPECT_TRUE(static_cast<bool>(next));
+  writer.commit(next.position);
+}
+
+TEST(VarlenRingTest, StaleCommitPositionIsNoop) {
+  varlen_arena& arena = make_ring();
+  ASSERT_TRUE(arena.init(spscring::layout_type::varlen, 8));
+
+  spscring::varlen_writer writer{arena.header()};
+  spscring::varlen_reader reader{arena.header()};
+
+  const auto reserved = writer.try_reserve(16);
+  ASSERT_TRUE(static_cast<bool>(reserved));
+
+  // Committing a position other than the outstanding reservation must not
+  // publish anything (commit_pos never regresses or jumps ahead).
+  writer.commit(reserved.position + 8);
+  EXPECT_EQ(arena.header()->rb_meta.commit_pos.load(), 0u);
+  EXPECT_EQ(reader.next_payload_size(), 0u);
+
+  // The real commit still works afterwards.
+  std::memcpy(reserved.payload, "real", 5);
+  writer.commit(reserved.position);
+  char recv[32]{};
+  ASSERT_TRUE(reader.read(recv, sizeof(recv)));
+  EXPECT_STREQ(recv, "real");
+}
+
 }  // namespace

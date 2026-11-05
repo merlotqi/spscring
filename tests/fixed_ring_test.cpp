@@ -226,4 +226,73 @@ TEST(FixedRingTest, SPSCThreadedStress) {
   }
 }
 
+TEST(FixedRingTest, SecondReserveWhilePendingReturnsNull) {
+  fixed_arena& arena = make_ring();
+  ASSERT_TRUE(arena.init(spscring::layout_type::fixed, 64, kItemSize));
+
+  spscring::fixed_writer writer{arena.header()};
+  spscring::fixed_reader reader{arena.header()};
+
+  void* first = writer.try_reserve();
+  ASSERT_NE(first, nullptr);
+
+  // A second reserve before commit() would overwrite the pending slot end and
+  // corrupt the first publication; it must be refused.
+  EXPECT_EQ(writer.try_reserve(), nullptr);
+
+  std::memcpy(first, "fixed-guard", 12);
+  writer.commit();
+
+  std::uint32_t size = 0;
+  const void* slot = reader.try_read(&size);
+  ASSERT_NE(slot, nullptr);
+  EXPECT_EQ(size, kItemSize);
+  EXPECT_EQ(std::memcmp(slot, "fixed-guard", 12), 0);
+  reader.read_advance(1);
+
+  // Reservation capacity is available again after the commit.
+  EXPECT_NE(writer.try_reserve(), nullptr);
+}
+
+TEST(FixedRingTest, CommitWithoutPendingIsNoop) {
+  fixed_arena& arena = make_ring();
+  ASSERT_TRUE(arena.init(spscring::layout_type::fixed, 64, kItemSize));
+
+  spscring::fixed_writer writer{arena.header()};
+  spscring::fixed_reader reader{arena.header()};
+
+  writer.commit();  // Nothing reserved: must not publish anything.
+  EXPECT_EQ(reader.try_read(nullptr), nullptr);
+  EXPECT_EQ(arena.header()->rb_meta.commit_pos.load(), 0u);
+}
+
+TEST(FixedRingTest, IsValidFixedRingChecksGeometry) {
+  // Valid geometry.
+  {
+    spscring_test::arena<256> a;
+    ASSERT_TRUE(a.init(spscring::layout_type::fixed, 64, 64));
+    EXPECT_TRUE(spscring::is_valid_fixed_ring(*a.header()));
+  }
+  // Capacity not a multiple of item size: init_control_block accepts it (it
+  // only checks the alignment multiple), the fixed-ring validator must
+  // reject it (96 % 32 == 0 but 96 % 64 != 0).
+  {
+    spscring_test::arena<96> a;
+    ASSERT_TRUE(a.init(spscring::layout_type::fixed, 32, 64));
+    EXPECT_FALSE(spscring::is_valid_fixed_ring(*a.header()));
+  }
+  // Fixed layout without an item size.
+  {
+    spscring_test::arena<256> a;
+    ASSERT_TRUE(a.init(spscring::layout_type::fixed, 64, 0));
+    EXPECT_FALSE(spscring::is_valid_fixed_ring(*a.header()));
+  }
+  // Varlen layout is never a valid fixed ring.
+  {
+    spscring_test::arena<256> a;
+    ASSERT_TRUE(a.init(spscring::layout_type::varlen, 8));
+    EXPECT_FALSE(spscring::is_valid_fixed_ring(*a.header()));
+  }
+}
+
 }  // namespace

@@ -5,10 +5,22 @@
 #include <cstdlib>
 #include <cstring>
 #include <spscring/atomic_backoff.hpp>
+#include <spscring/atomic_wait.hpp>
 #include <spscring/control_block.hpp>
+#include <spscring/notify_word.hpp>
 #include <spscring/ring_view.hpp>
 
 namespace spscring {
+
+// Structural validation for a fixed ring's control block: fixed layout, a
+// non-zero item size, and a capacity that is an exact multiple of the item
+// size (init_control_block only checks alignment, not the item multiple).
+// Call this before constructing a fixed_writer; the constructor aborts on a
+// misconfigured ring because it cannot maintain the slot invariant otherwise.
+inline bool is_valid_fixed_ring(const control_block& header) noexcept {
+  return validate_control_block(header) && header.layout_type == static_cast<std::uint32_t>(layout_type::fixed) &&
+         header.fixed_item_size != 0 && header.data_capacity % header.fixed_item_size == 0;
+}
 
 // Producer side of a fixed-size SPSC ring. Every message occupies exactly
 // `item_size` bytes, so wraps are handled with a dummy write and the fast path
@@ -29,10 +41,15 @@ class fixed_writer final : public ring_view {
     }
   }
 
-  // Reserves the next slot. Returns nullptr when the ring is full; the
-  // spin_until_reserve overload blocks with exponential backoff instead.
-  // The reservation is invisible to the consumer until commit() publishes it.
+  // Reserves the next slot. Returns nullptr when the ring is full — or when a
+  // previously reserved slot is still uncommitted (misuse guard: a second
+  // outstanding reservation would overwrite reserved_end_ and corrupt the
+  // first publication; commit() the pending slot first). The reservation is
+  // invisible to the consumer until commit() publishes it.
   void* try_reserve() noexcept {
+    if (pending_) {
+      return nullptr;
+    }
     control_block& hdr = *header_;
     const std::uint64_t item_size = hdr.fixed_item_size;
     const std::uint64_t capacity = hdr.data_capacity;
@@ -47,10 +64,13 @@ class fixed_writer final : public ring_view {
 
     reserved_end_ = write + item_size;
     hdr.rb_meta.write_pos.store(reserved_end_, std::memory_order_relaxed);
+    pending_ = true;
     return data_ + write_index;
   }
 
   // Blocking reserve with exponential backoff (pause -> yield -> futex).
+  // Misuse note: calling this while a reservation is already pending spins
+  // forever (try_reserve refuses); commit the pending slot first.
   void* spin_until_reserve(atomic_backoff& backoff) noexcept {
     for (;;) {
       if (void* slot = try_reserve()) {
@@ -62,13 +82,19 @@ class fixed_writer final : public ring_view {
 
   // Publishes the slot filled after the last try_reserve: advances commit_pos
   // (release) so consumers chasing commit_pos observe the payload writes.
-  // Also bumps the 32-bit notify counter and wakes blocked consumers.
-  // Must be called once per successful reserve, in reserve order.
+  // Wakes blocked consumers only when one is registered on the notify word
+  // (see notify_word.hpp). Must be called once per successful reserve, in
+  // reserve order; a no-op when no reservation is pending.
   void commit() noexcept {
+    if (!pending_) {
+      return;
+    }
     control_block& hdr = *header_;
     hdr.rb_meta.commit_pos.store(reserved_end_, std::memory_order_release);
-    hdr.rb_meta.commit_seq.fetch_add(1, std::memory_order_seq_cst);
-    atomic_notify_all(&hdr.rb_meta.commit_seq);
+    pending_ = false;
+    if (bump_notify_word(hdr.rb_meta.commit_seq)) {
+      atomic_notify_all(&hdr.rb_meta.commit_seq);
+    }
   }
 
   // Fills the next slot and publishes it. Returns false when the ring is full.
@@ -94,6 +120,8 @@ class fixed_writer final : public ring_view {
   // End position of the slot filled after the last try_reserve; published by
   // commit().
   std::uint64_t reserved_end_{0};
+  // True between a successful try_reserve() and its commit().
+  bool pending_{false};
 };
 
 }  // namespace spscring
